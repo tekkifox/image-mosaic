@@ -127,6 +127,9 @@ class PhotoPrismClient
         if ($size <= 500) {
             return 'tile_500';
         }
+        if ($size > 500) {
+            return 'fit_5120';
+        }
 
         return 'tile_500';
     }
@@ -208,7 +211,7 @@ class PhotoPrismClient
         $candidates = ['uuid', 'UUID', 'uid', 'UID', 'id', 'ID'];
         foreach ($candidates as $k) {
             if (!empty($photo[$k])) {
-                return $this->baseUrl . '/#/photo/' . $photo[$k];
+                return $this->getThumbnailUrl($photo, 5120);
             }
         }
         return $this->baseUrl;
