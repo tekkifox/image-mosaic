@@ -10,6 +10,7 @@ class PhotoPrismClient
     private string $username;
     private string $password;
     private ?int $tokenExpiresAt = null;
+    private ?string $previewToken = null;
     private array $lastRequestDebug = [];
 
     public function __construct(array $config)
@@ -39,6 +40,10 @@ class PhotoPrismClient
 
     private function getAuthType(): string
     {
+        if ($this->useBasicAuth && $this->username !== '' && $this->password !== '') {
+            return 'basic_auth';
+        }
+
         // Prefer a configured access token over API key, basic auth, or password grant.
         if ($this->accessToken !== '') {
             return 'access_token';
@@ -46,10 +51,6 @@ class PhotoPrismClient
 
         if ($this->apiKey !== '') {
             return 'api_key';
-        }
-
-        if ($this->useBasicAuth && $this->username !== '' && $this->password !== '') {
-            return 'basic_auth';
         }
 
         if ($this->username !== '' && $this->password !== '') {
@@ -61,24 +62,154 @@ class PhotoPrismClient
 
     public function listPhotos(int $limit = 144): array
     {
-        return $this->request('/photos', ['limit' => $limit, 'order' => 'random']);
+        return $this->request('/photos', ['limit' => $limit, 'order' => 'random', 'count' => $limit]);
     }
 
-    public function getThumbnailUrl(array $photo): ?string
+    public function getThumbnailUrl(array $photo, int $size = 224): ?string
     {
-        if (!empty($photo['uuid'])) {
-            return $this->baseUrl . '/api/v1/photos/' . $photo['uuid'] . '/thumb';
+        $hash = $this->getPhotoHashFromArray($photo);
+        $previewToken = $this->getPreviewToken();
+        if ($hash !== null && $previewToken !== null) {
+            return $this->baseUrl . '/api/v1/t/' . rawurlencode($hash) . '/'
+                . rawurlencode($previewToken) . '/' . $this->mapPixelSizeToThumbnailName($size);
         }
-        if (!empty($photo['id'])) {
-            return $this->baseUrl . '/api/v1/photos/' . $photo['id'] . '/thumb';
+
+        return null;
+    }
+
+    /**
+     * Return the photo identifier from various possible key names.
+     */
+    private function getPhotoIdFromArray(array $photo): ?string
+    {
+        $candidates = ['uuid', 'UUID', 'uid', 'UID', 'id', 'ID'];
+        foreach ($candidates as $k) {
+            if (!empty($photo[$k])) {
+                return (string) $photo[$k];
+            }
         }
         return null;
     }
 
+    /**
+     * Return the SHA1 file hash used by PhotoPrism's /api/v1/t/:hash/:token/:size endpoint.
+     */
+    private function getPhotoHashFromArray(array $photo): ?string
+    {
+        foreach (['Hash', 'hash'] as $k) {
+            if (!empty($photo[$k])) {
+                return (string) $photo[$k];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Map a requested pixel size to a PhotoPrism thumbnail size name.
+     */
+    private function mapPixelSizeToThumbnailName(int $size): string
+    {
+        if ($size <= 50) {
+            return 'tile_50';
+        }
+        if ($size <= 100) {
+            return 'tile_100';
+        }
+        if ($size <= 224) {
+            return 'tile_224';
+        }
+        if ($size <= 384) {
+            return 'tile_384';
+        }
+        if ($size <= 480) {
+            return 'tile_480';
+        }
+        if ($size <= 500) {
+            return 'tile_500';
+        }
+
+        return 'tile_500';
+    }
+
+    /**
+     * Return the preview token from the most recent PhotoPrism search response.
+     */
+    private function getPreviewToken(): ?string
+    {
+        if ($this->previewToken !== null && $this->previewToken !== '') {
+            return $this->previewToken;
+        }
+
+        $last = $this->getLastRequestDebug();
+        if (!empty($last['preview_token'])) {
+            return (string) $last['preview_token'];
+        }
+
+        if (!empty($last['curl_verbose']) && is_string($last['curl_verbose'])) {
+            if (preg_match('/^[< ]+x-preview-token:\s*(\S+)/im', $last['curl_verbose'], $m)) {
+                return trim($m[1]);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Fetch the thumbnail binary for a photo and return a data URI.
+     * Returns null on failure.
+     */
+    public function fetchThumbnailDataUri(array $photo, int $size = 200): ?string
+    {
+        $thumbUrl = $this->getThumbnailUrl($photo, $size);
+        if ($thumbUrl === null) {
+            return null;
+        }
+
+        $headers = $this->buildHeaders(false);
+        $filtered = [];
+        foreach ($headers as $h) {
+            if (stripos($h, 'Accept:') === 0 || stripos($h, 'Content-Type:') === 0) {
+                continue;
+            }
+            $filtered[] = $h;
+        }
+        $filtered[] = 'Accept: image/*';
+
+        $ch = curl_init($thumbUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $filtered);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+
+        $data = curl_exec($ch);
+        $info = curl_getinfo($ch);
+        curl_close($ch);
+
+        if ($data === false || ($info['http_code'] ?? 0) >= 400) {
+            return null;
+        }
+
+        // PhotoPrism returns a placeholder SVG when the hash/token/size is invalid.
+        if (str_starts_with($data, '<svg') || str_starts_with($data, '<?xml')) {
+            return null;
+        }
+
+        $contentType = $info['content_type'] ?? 'image/jpeg';
+        if (str_contains($contentType, ';')) {
+            $contentType = trim(explode(';', $contentType, 2)[0]);
+        }
+
+        return 'data:' . $contentType . ';base64,' . base64_encode($data);
+    }
+
     public function getPhotoPageUrl(array $photo): string
     {
-        if (!empty($photo['uuid'])) {
-            return $this->baseUrl . '/#/photo/' . $photo['uuid'];
+        // Accept various key casings for the photo identifier.
+        $candidates = ['uuid', 'UUID', 'uid', 'UID', 'id', 'ID'];
+        foreach ($candidates as $k) {
+            if (!empty($photo[$k])) {
+                return $this->baseUrl . '/#/photo/' . $photo[$k];
+            }
         }
         return $this->baseUrl;
     }
@@ -106,11 +237,19 @@ class PhotoPrismClient
         $tmp = sys_get_temp_dir() . '/image_mosaic_last_request.json';
         @file_put_contents($tmp, json_encode($this->lastRequestDebug, JSON_UNESCAPED_SLASHES));
 
+        $responseHeaders = [];
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, static function ($curl, string $headerLine) use (&$responseHeaders): int {
+            $parts = explode(':', $headerLine, 2);
+            if (count($parts) === 2) {
+                $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+            }
+            return strlen($headerLine);
+        });
 
         if ($method !== 'GET') {
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
@@ -125,10 +264,17 @@ class PhotoPrismClient
         $response = curl_exec($ch);
         $info = curl_getinfo($ch);
         $error = curl_error($ch);
+
         curl_close($ch);
+
+        if (!empty($responseHeaders['x-preview-token'])) {
+            $this->previewToken = $responseHeaders['x-preview-token'];
+        }
 
         $this->lastRequestDebug['raw_response'] = $response;
         $this->lastRequestDebug['response_info'] = $info;
+        $this->lastRequestDebug['response_headers'] = $responseHeaders;
+        $this->lastRequestDebug['preview_token'] = $this->previewToken;
         $this->lastRequestDebug['http_status'] = $info['http_code'] ?? null;
         // Update persisted debug file with response details
         $tmp = sys_get_temp_dir() . '/image_mosaic_last_request.json';
@@ -156,6 +302,7 @@ class PhotoPrismClient
 
     private function refreshAccessToken(): void
     {
+
         if ($this->accessToken !== '' && $this->tokenExpiresAt !== null && time() + 30 < $this->tokenExpiresAt) {
             return;
         }
@@ -322,7 +469,7 @@ class PhotoPrismClient
 
     private function buildHeaders(bool $skipAuth = false): array
     {
-        $headers = ['Accept: application/json'];
+        $headers = ['Accept: application/json', 'Content-Type: application/json'];
         if ($skipAuth) {
             return $headers;
         }
