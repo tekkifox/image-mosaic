@@ -1,16 +1,26 @@
-# Image Mosaic PHP App
+# Image Mosaic Project
 
-A small PHP web app that renders a 12×12 image mosaic using PhotoPrism as the backend image source.
+This project functions as a dedicated client layer for integrating with a PhotoPrism instance, enabling the rendering of image mosaics and managing photo metadata via its API.
 
-## Files
+## Project Structure
+- `api.php`: The service entry point responsible for coordinating requests to the PhotoPrism client and handling application logic.
+- `photoprism_client.php`: Contains the core business logic for communicating with the PhotoPrism API (e.g., `getPhotoAlbums`, listing photos). It is responsible for network requests and data translation.
+- `config.php`: **Configuration File.** This file holds sensitive environment variables, including the PhotoPrism base URL, API keys, and any specific client timeouts or limits. It acts as the primary bridge between the application logic and the external service.
+- `index.php`: The main application bootstrap file, used to initialize the system and begin processing requests.
+- `.gitignore`: Defines files and directories that should be ignored by version control (e.g., local cache, dependency artifacts).
 
-- `index.php` — frontend page and mosaic UI
-- `api.php` — backend JSON endpoint for tile data
-- `photoprism_client.php` — simple PhotoPrism API client
-- `config.php` — local PhotoPrism configuration values
+## Setup and Installation
+1. **Prerequisites:** Ensure PHP is installed and running in your environment.
+2. **Configuration:** Set up the necessary connection details by populating `config.php` with the PhotoPrism base URL and authentication tokens/keys.
+3. **Service Readiness:** Verify that the target PhotoPrism instance is operational and accepting connections at the defined base URL.
 
-## Setup
+## Usage
+To successfully run the image mosaic renderer, access `index.php` (or whichever file serves as your main entry point) and rely on the initialization sequence handled by `api.php`.
 
+## Contributing
+Contributions are welcome. Please refer to the CONTRIBUTING guide for submission details.
+
+## Running the Project
 1. Copy or update `config.php` values, or export environment variables:
 
 ```bash
@@ -45,27 +55,3 @@ The app supports multiple authentication methods with the following precedence:
    - `PHOTO_PRISM_OAUTH_CLIENT_SECRET`
 4. **Basic Auth**: Set `PHOTO_PRISM_USE_BASIC_AUTH=true` to use HTTP Basic Authentication with username/password
 5. **Session Login**: Falls back to session-based authentication if other methods fail
-
-### Endpoints
-
-- `PhotoPrismClient::listPhotos()` fetches up to 144 photos from the `/api/v1/photos` endpoint.
-- `api.php?action=tiles` returns the mosaic tile metadata.
-- Thumbnails are served from PhotoPrism via `/api/v1/photos/{uuid}/thumb`.
-
-### Known Issues
-
-The `/api/v1/photos` endpoint on some PhotoPrism instances may return HTTP 400 "Unable to do that" or HTTP 401 errors regardless of the authentication method used. This appears to be a server-side access restriction or account permission issue:
-
-- Successfully authenticated endpoints (e.g., `/api/v1/config`, `/api/v1/echo`) return 200
-- Photo endpoints return 400/401 even with valid, authenticated tokens
-
-If you encounter this issue, verify:
-- The PhotoPrism user account has photo read permissions
-- The PhotoPrism instance allows photo API access for your account
-- Check PhotoPrism server logs for specific error details
-- Consider contacting your PhotoPrism administrator
-
-## Customization
-
-- Change mosaic dimensions in `config.php` (`mosaic_columns`, `mosaic_rows`).
-- Add additional endpoints or search parameters in `photoprism_client.php`.

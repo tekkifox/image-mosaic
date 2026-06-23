@@ -282,6 +282,40 @@ class PhotoPrismClient
         return $this->baseUrl;
     }
 
+    /**
+     * Fetch album details for a photo.
+     * 
+     * @param array $photo The photo data
+     * @return array|null Album details or null if not found
+     */
+    public function getPhotoAlbums(array $photo): ?array
+    {
+        // Optimization: Check if album data is already present in the photo object
+        if (!empty($photo['Albums']) && is_array($photo['Albums'])) {
+            return $photo['Albums'];
+        }
+
+        $photoId = $this->getPhotoIdFromArray($photo);
+        if ($photoId === null) {
+            return null;
+        }
+
+        try {
+            // Get photo details which includes album information
+            $photoDetails = $this->request('/photos/' . rawurlencode($photoId));
+            
+        // Extract album UIDs from photo details
+        if (!empty($photoDetails['Albums']) && is_array($photoDetails['Albums'])) {
+            // Refactored to return only the album title for optimized data transfer.
+            return array_column($photoDetails['Albums'], 'Title');
+        }
+        } catch (\RuntimeException $e) {
+            return null;
+        }
+
+        return null;
+    }
+
     private function request(
         string $path,
         array $params = [],

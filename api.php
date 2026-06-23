@@ -60,6 +60,7 @@ if ($action === 'tiles') {
 
         $tiles[] = [
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
+            'albums' => $client->getPhotoAlbums($photo),
             'thumb' => $thumb,
             'link' => $client->getPhotoPageUrl($photo),
         ];
