@@ -41,7 +41,68 @@ if ($action === 'tiles') {
     }
 
     $dataUrisByHash = $client->fetchThumbnailsDataUriParallel($photos, 200);
+
+    // Determine which photos include embedded album data and which need detail fetch
     $tiles = [];
+    $missingAlbumIds = [];
+    $photoIndexById = [];
+    $embeddedAlbumCount = 0;
+
+    // Helper to get a photo identifier from a photo array (mirrors client logic)
+    $getPhotoId = function (array $photo): ?string {
+        foreach (['uuid', 'UUID', 'uid', 'UID', 'id', 'ID'] as $k) {
+            if (!empty($photo[$k])) {
+                return (string) $photo[$k];
+            }
+        }
+        return null;
+    };
+
+    // Helper to convert an album object/entry to a title string when possible
+    $mapAlbumToTitle = function ($album): ?string {
+        if (is_string($album)) {
+            return $album; // might be UID — fallback to UID value for now
+        }
+        if (!is_array($album)) {
+            return null;
+        }
+        foreach (['Title', 'title', 'Name', 'name'] as $k) {
+            if (!empty($album[$k])) {
+                return (string) $album[$k];
+            }
+        }
+        // If album has a UID but no title, return UID as a fallback
+        if (!empty($album['UID'])) {
+            return (string) $album['UID'];
+        }
+        return null;
+    };
+
+    foreach ($photos as $idx => $photo) {
+        $id = $getPhotoId($photo);
+        if ($id === null) {
+            continue;
+        }
+
+        // If embedded album data present, we'll use it; otherwise record the id for batch details fetch.
+        if (empty($photo['Albums']) && empty($photo['albums'])) {
+            $missingAlbumIds[] = $id;
+            $photoIndexById[$id] = $idx;
+        } else {
+            $embeddedAlbumCount++;
+        }
+    }
+
+    $fetchedDetails = [];
+    if (!empty($missingAlbumIds)) {
+        // Fetch missing photo details in parallel to avoid sequential API calls.
+        $fetchedDetails = $client->fetchPhotosDetailsParallel($missingAlbumIds);
+    }
+
+    // Debug info about album discovery
+    $responseDebug['embedded_album_count'] = $embeddedAlbumCount;
+    $responseDebug['missing_album_count'] = count($missingAlbumIds);
+    $responseDebug['fetched_details_count'] = is_array($fetchedDetails) ? count($fetchedDetails) : 0;
 
     foreach ($photos as $photo) {
         $hash = $client->getPhotoHash($photo);
@@ -58,9 +119,26 @@ if ($action === 'tiles') {
             continue;
         }
 
+        // Prefer embedded album objects when available
+        $albumTitles = [];
+        if (!empty($photo['Albums']) && is_array($photo['Albums'])) {
+            $albumTitles = array_values(array_filter(array_map($mapAlbumToTitle, $photo['Albums'])));
+        } elseif (!empty($photo['albums']) && is_array($photo['albums'])) {
+            $albumTitles = array_values(array_filter(array_map($mapAlbumToTitle, $photo['albums'])));
+        } else {
+            // Fallback to fetched details (parallel) if available
+            $id = $getPhotoId($photo);
+            if ($id !== null && isset($fetchedDetails[$id]) && is_array($fetchedDetails[$id])) {
+                $pd = $fetchedDetails[$id];
+                if (!empty($pd['Albums']) && is_array($pd['Albums'])) {
+                    $albumTitles = array_values(array_filter(array_map($mapAlbumToTitle, $pd['Albums'])));
+                }
+            }
+        }
+
         $tiles[] = [
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
-            'albums' => $client->getPhotoAlbums($photo),
+            'albums' => $albumTitles,
             'thumb' => $thumb,
             'link' => $client->getPhotoPageUrl($photo),
         ];

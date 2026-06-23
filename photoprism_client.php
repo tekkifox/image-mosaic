@@ -1,11 +1,43 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ImageMosaic;
 
 use RuntimeException;
+use InvalidArgumentException;
 
 class PhotoPrismClient
 {
+    // --- API Endpoints and Configuration Keys ---
+    private const API_VERSION_PATH = '/api/v1';
+    private const PHOTOS_ENDPOINT = '/photos';
+    private const OAUTH_TOKEN_ENDPOINT = '/oauth/token';
+    private const SESSION_ENDPOINT = '/session';
+    private const THUMBNAIL_PATH = '/api/v1/t';
+
+    // --- Auth Type Constants ---
+    private const AUTH_TYPE_BASIC = 'basic_auth';
+    private const AUTH_TYPE_ACCESS_TOKEN = 'access_token';
+    private const AUTH_TYPE_API_KEY = 'api_key';
+    private const AUTH_TYPE_OAUTH_PASSWORD = 'oauth_password';
+    private const AUTH_TYPE_NONE = 'none';
+
+    private const CONFIG_BASE_URL = 'photo_prism_base_url';
+    private const CONFIG_API_KEY = 'photo_prism_api_key';
+    private const CONFIG_ACCESS_TOKEN = 'photo_prism_access_token';
+    private const CONFIG_USE_BASIC_AUTH = 'photo_prism_use_basic_auth';
+    private const CONFIG_OAUTH_CLIENT_ID = 'photo_prism_oauth_client_id';
+    private const CONFIG_OAUTH_CLIENT_SECRET = 'photo_prism_oauth_client_secret';
+    private const CONFIG_USERNAME = 'photo_prism_username';
+    private const CONFIG_PASSWORD = 'photo_prism_password';
+
+    // --- Default cURL Options ---
+    private const DEFAULT_TIMEOUT = 15;
+    private const DEFAULT_CONNECT_TIMEOUT = 10;
+    private const THUMBNAIL_REQUEST_TIMEOUT = 15; // Specific timeout for thumbnail fetches
+
+    // --- Class Properties ---
     private string $baseUrl;
     private string $apiKey;
     private string $accessToken;
@@ -18,8 +50,13 @@ class PhotoPrismClient
     private ?string $previewToken = null;
     private array $lastRequestDebug = [];
 
+    /**
+     * Constructor initializes the client with configuration array.
+     */
     public function __construct(array $config)
     {
+        // Use throw exceptions for missing critical config values instead of assigning empty strings,
+        // as this enforces configuration correctness early.
         $this->baseUrl = rtrim($config['photo_prism_base_url'] ?? '', '/');
         $this->apiKey = $config['photo_prism_api_key'] ?? '';
         $this->accessToken = $config['photo_prism_access_token'] ?? '';
@@ -28,6 +65,10 @@ class PhotoPrismClient
         $this->oauthClientSecret = $config['photo_prism_oauth_client_secret'] ?? '';
         $this->username = $config['photo_prism_username'] ?? '';
         $this->password = $config['photo_prism_password'] ?? '';
+
+        if (empty($this->baseUrl)) {
+            throw new InvalidArgumentException('Base URL must be configured.');
+        }
     }
 
     public function getConnectionDebug(): array
@@ -46,23 +87,23 @@ class PhotoPrismClient
     private function getAuthType(): string
     {
         if ($this->useBasicAuth && $this->username !== '' && $this->password !== '') {
-            return 'basic_auth';
+            return self::AUTH_TYPE_BASIC;
         }
 
         // Prefer a configured access token over API key, basic auth, or password grant.
         if ($this->accessToken !== '') {
-            return 'access_token';
+            return self::AUTH_TYPE_ACCESS_TOKEN;
         }
 
         if ($this->apiKey !== '') {
-            return 'api_key';
+            return self::AUTH_TYPE_API_KEY;
         }
 
         if ($this->username !== '' && $this->password !== '') {
-            return 'oauth_password';
+            return self::AUTH_TYPE_OAUTH_PASSWORD;
         }
 
-        return 'none';
+        return self::AUTH_TYPE_NONE;
     }
 
     public function listPhotos(int $limit = 144): array
@@ -175,15 +216,8 @@ class PhotoPrismClient
 
         $headers = $this->getThumbnailHeaders();
 
-        $ch = curl_init($thumbUrl);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-
-        $data = curl_exec($ch);
-        $info = curl_getinfo($ch);
-        curl_close($ch);
+        $ch = $this->initCurl($thumbUrl, $headers, self::THUMBNAIL_REQUEST_TIMEOUT);
+        [$data, $info, $error] = $this->executeCurl($ch);
 
         if ($data === false || ($info['http_code'] ?? 0) >= 400) {
             return null;
@@ -224,11 +258,8 @@ class PhotoPrismClient
                 continue;
             }
 
-            $ch = curl_init($thumbUrl);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $this->getThumbnailHeaders());
-            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+            $ch = $this->initCurl($thumbUrl, $this->getThumbnailHeaders(), self::THUMBNAIL_REQUEST_TIMEOUT);
+            // For multi handles we need to disable RETURNTRANSFER at init time; it's already set by initCurl
             curl_multi_add_handle($multiHandle, $ch);
 
             $handles[$thumbUrl] = array ($ch, $photo);
@@ -270,6 +301,56 @@ class PhotoPrismClient
         return $results;
     }
 
+    /**
+     * Fetch multiple photo details in parallel using curl_multi and return a map of id => details.
+     * Missing or failed entries will have null values.
+     *
+     * @param string[] $ids
+     * @return array<string, array|null>
+     */
+    public function fetchPhotosDetailsParallel(array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        $multiHandle = curl_multi_init();
+        $handles = [];
+
+        foreach ($ids as $id) {
+            $url = $this->baseUrl . self::API_VERSION_PATH . '/photos/' . rawurlencode((string) $id);
+            $ch = $this->initCurl($url, $this->buildHeaders(false));
+            curl_multi_add_handle($multiHandle, $ch);
+            $handles[(string) $id] = $ch;
+        }
+
+        $running = null;
+        do {
+            curl_multi_exec($multiHandle, $running);
+            curl_multi_select($multiHandle);
+        } while ($running > 0);
+
+        $results = [];
+        foreach ($handles as $id => $ch) {
+            $data = curl_multi_getcontent($ch);
+            $info = curl_getinfo($ch);
+            curl_multi_remove_handle($multiHandle, $ch);
+            curl_close($ch);
+
+            if ($data === false || (($info['http_code'] ?? 0) >= 400)) {
+                $results[$id] = null;
+                continue;
+            }
+
+            $decoded = json_decode($data, true);
+            $results[$id] = is_array($decoded) ? $decoded : null;
+        }
+
+        curl_multi_close($multiHandle);
+
+        return $results;
+    }
+
     public function getPhotoPageUrl(array $photo): string
     {
         // Accept various key casings for the photo identifier.
@@ -283,37 +364,80 @@ class PhotoPrismClient
     }
 
     /**
-     * Fetch album details for a photo.
-     * 
-     * @param array $photo The photo data
-     * @return array|null Album details or null if not found
+     * Return album titles for a photo. Always returns an array (possibly empty).
+     *
+     * @param array $photo
+     * @return string[]
      */
-    public function getPhotoAlbums(array $photo): ?array
+    public function getPhotoAlbums(array $photo): array
     {
-        // Optimization: Check if album data is already present in the photo object
+        // If albums are already embedded in the photo payload, extract titles directly.
         if (!empty($photo['Albums']) && is_array($photo['Albums'])) {
-            return $photo['Albums'];
+            return $this->extractAlbumTitles($photo['Albums']);
+        }
+
+        if (!empty($photo['albums']) && is_array($photo['albums'])) {
+            return $this->extractAlbumTitles($photo['albums']);
         }
 
         $photoId = $this->getPhotoIdFromArray($photo);
         if ($photoId === null) {
-            return null;
+            return [];
         }
 
         try {
-            // Get photo details which includes album information
             $photoDetails = $this->request('/photos/' . rawurlencode($photoId));
-            
-        // Extract album UIDs from photo details
-        if (!empty($photoDetails['Albums']) && is_array($photoDetails['Albums'])) {
-            // Refactored to return only the album title for optimized data transfer.
-            return array_column($photoDetails['Albums'], 'Title');
-        }
+            if (!empty($photoDetails['Albums']) && is_array($photoDetails['Albums'])) {
+                return $this->extractAlbumTitles($photoDetails['Albums']);
+            }
         } catch (\RuntimeException $e) {
-            return null;
+            // Return empty list on error to keep calling code simple.
+            return [];
         }
 
-        return null;
+        return [];
+    }
+
+    /**
+     * Normalize an array of album entries to an array of titles.
+     * Accepts arrays of album objects or string UIDs; falls back to UID when title missing.
+     *
+     * @param array $albums
+     * @return string[]
+     */
+    private function extractAlbumTitles(array $albums): array
+    {
+        $titles = [];
+        foreach ($albums as $a) {
+            if (is_string($a)) {
+                $titles[] = $a;
+                continue;
+            }
+            if (!is_array($a)) {
+                continue;
+            }
+            if (!empty($a['Title'])) {
+                $titles[] = (string) $a['Title'];
+                continue;
+            }
+            if (!empty($a['title'])) {
+                $titles[] = (string) $a['title'];
+                continue;
+            }
+            if (!empty($a['Name'])) {
+                $titles[] = (string) $a['Name'];
+                continue;
+            }
+            if (!empty($a['name'])) {
+                $titles[] = (string) $a['name'];
+                continue;
+            }
+            if (!empty($a['UID'])) {
+                $titles[] = (string) $a['UID'];
+                continue;
+            }
+        }
+        return array_values(array_unique(array_filter($titles, fn($v) => $v !== null && $v !== '')));
     }
 
     private function request(
@@ -323,7 +447,7 @@ class PhotoPrismClient
         ?array $body = null,
         bool $skipAuth = false
     ): array {
-        if (!$skipAuth && $this->getAuthType() === 'oauth_password') {
+        if (!$skipAuth && $this->getAuthType() === self::AUTH_TYPE_OAUTH_PASSWORD) {
             $this->refreshAccessToken();
         }
 
@@ -345,11 +469,7 @@ class PhotoPrismClient
         @file_put_contents($tmp, json_encode($this->lastRequestDebug, JSON_UNESCAPED_SLASHES));
 
         $responseHeaders = [];
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        $ch = $this->initCurl($url, $headers);
         curl_setopt(
             $ch,
             CURLOPT_HEADERFUNCTION,
@@ -372,11 +492,7 @@ class PhotoPrismClient
             }
         }
 
-        $response = curl_exec($ch);
-        $info = curl_getinfo($ch);
-        $error = curl_error($ch);
-
-        curl_close($ch);
+        [$response, $info, $error] = $this->executeCurl($ch);
 
         if (!empty($responseHeaders['x-preview-token'])) {
             $this->previewToken = $responseHeaders['x-preview-token'];
@@ -481,18 +597,10 @@ class PhotoPrismClient
             $headers[] = 'Authorization: Basic ' . $clientAuth;
         }
 
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $ch = $this->initCurl($url, $headers);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-
-        $response = curl_exec($ch);
-        $info = curl_getinfo($ch);
-        $error = curl_error($ch);
-        curl_close($ch);
+        [$response, $info, $error] = $this->executeCurl($ch);
 
         if ($response === false) {
             throw new \RuntimeException('OAuth token request failed: ' . $error);
@@ -624,5 +732,38 @@ class PhotoPrismClient
         }
 
         return $headers;
+    }
+
+    /**
+     * Initialize a cURL handle with common options.
+     *
+     * @param string $url
+     * @param array $headers
+     * @param int|null $timeout
+     * @return resource
+     */
+    private function initCurl(string $url, array $headers, ?int $timeout = null)
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $timeout ?? self::DEFAULT_TIMEOUT);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, self::DEFAULT_CONNECT_TIMEOUT);
+        return $ch;
+    }
+
+    /**
+     * Execute a configured cURL handle and return response, info and error.
+     *
+     * @param resource $ch
+     * @return array [response:string, info:array, error:string]
+     */
+    private function executeCurl($ch): array
+    {
+        $response = curl_exec($ch);
+        $info = curl_getinfo($ch);
+        $error = curl_error($ch);
+        curl_close($ch);
+        return [$response, $info, $error];
     }
 }

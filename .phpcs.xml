@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<ruleset name="Image Mosaic PHPCS config">
+    <description>PHPCS configuration for this repository. Uses PSR-12 and excludes third-party and build directories.</description>
+
+    <!-- Use PSR-12 as the coding standard -->
+    <rule ref="PSR12" />
+
+    <!-- Exclude common directories that contain third-party or generated code -->
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*/.kilo/*</exclude-pattern>
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/.git/*</exclude-pattern>
+    <exclude-pattern>*/dist/*</exclude-pattern>
+    <exclude-pattern>*/build/*</exclude-pattern>
+
+    <!-- Exclude non-PHP files explicitly to speed up scans -->
+    <exclude-pattern>*.js</exclude-pattern>
+    <exclude-pattern>*.css</exclude-pattern>
+    <exclude-pattern>*.md</exclude-pattern>
+</ruleset>
