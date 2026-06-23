@@ -16,6 +16,7 @@
             text-align: center;
             background: #151515;
             border-bottom: 1px solid #333;
+            display: none;
         }
         h1 {
             margin: 0 0 8px;
@@ -28,16 +29,16 @@
         #mosaic {
             display: grid;
             grid-template-columns: repeat(12, minmax(0, 1fr));
-            gap: 6px;
-            max-width: 1280px;
-            margin: 24px auto;
-            padding: 0 12px 40px;
+            gap: 0;
+            /*max-width: 1280px;*/
+            /*margin: 24px auto;*/
+            padding: 0;
         }
         .tile {
             position: relative;
             aspect-ratio: 1 / 1;
             overflow: hidden;
-            border-radius: 10px;
+            border-radius: 0;
             background: #222;
             transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
@@ -71,6 +72,7 @@
             text-align: center;
             color: #888;
             padding-bottom: 24px;
+            display: none;
         }
     </style>
 </head>

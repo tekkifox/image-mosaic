@@ -1,4 +1,7 @@
 <?php
+
+namespace ImageMosaic;
+
 class PhotoPrismClient
 {
     private string $baseUrl;
@@ -217,8 +220,13 @@ class PhotoPrismClient
         return $this->baseUrl;
     }
 
-    private function request(string $path, array $params = [], string $method = 'GET', ?array $body = null, bool $skipAuth = false): array
-    {
+    private function request(
+        string $path,
+        array $params = [],
+        string $method = 'GET',
+        ?array $body = null,
+        bool $skipAuth = false
+    ): array {
         if (!$skipAuth && $this->getAuthType() === 'oauth_password') {
             $this->refreshAccessToken();
         }
@@ -246,13 +254,17 @@ class PhotoPrismClient
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-        curl_setopt($ch, CURLOPT_HEADERFUNCTION, static function ($curl, string $headerLine) use (&$responseHeaders): int {
-            $parts = explode(':', $headerLine, 2);
-            if (count($parts) === 2) {
-                $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+        curl_setopt(
+            $ch,
+            CURLOPT_HEADERFUNCTION,
+            static function ($curl, string $headerLine) use (&$responseHeaders): int {
+                $parts = explode(':', $headerLine, 2);
+                if (count($parts) === 2) {
+                    $responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+                }
+                return strlen($headerLine);
             }
-            return strlen($headerLine);
-        });
+        );
 
         if ($method !== 'GET') {
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
@@ -284,20 +296,24 @@ class PhotoPrismClient
         @file_put_contents($tmp, json_encode($this->lastRequestDebug, JSON_UNESCAPED_SLASHES));
 
         if ($response === false) {
-            throw new RuntimeException('PhotoPrism API request failed: ' . $error);
+            throw new \RuntimeException('PhotoPrism API request failed: ' . $error);
         }
 
         $data = json_decode($response, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
             if (($info['http_code'] ?? 0) >= 400) {
-                throw new RuntimeException('PhotoPrism API request failed (' . ($info['http_code'] ?? 'unknown') . '): ' . $response);
+                throw new \RuntimeException(
+                    'PhotoPrism API request failed (' . ($info['http_code'] ?? 'unknown') . '): ' . $response
+                );
             }
-            throw new RuntimeException('PhotoPrism API returned invalid JSON: ' . json_last_error_msg());
+            throw new \RuntimeException('PhotoPrism API returned invalid JSON: ' . json_last_error_msg());
         }
 
         if (($info['http_code'] ?? 0) >= 400) {
             $message = $data['error'] ?? $data['message'] ?? json_encode($data, JSON_UNESCAPED_SLASHES);
-            throw new RuntimeException('PhotoPrism API request failed (' . ($info['http_code'] ?? 'unknown') . '): ' . $message);
+            throw new \RuntimeException(
+                'PhotoPrism API request failed (' . ($info['http_code'] ?? 'unknown') . '): ' . $message
+            );
         }
 
         return is_array($data) ? $data : [];
@@ -311,7 +327,7 @@ class PhotoPrismClient
         }
 
         if ($this->username === '' || $this->password === '') {
-            throw new RuntimeException('PhotoPrism OAuth password grant requires username and password.');
+            throw new \RuntimeException('PhotoPrism OAuth password grant requires username and password.');
         }
 
         // Try OAuth password grant with client authentication via HTTP Basic Auth
@@ -325,15 +341,17 @@ class PhotoPrismClient
                 }
                 return;
             }
-        } catch (RuntimeException $e) {
+        } catch (\RuntimeException $e) {
             // OAuth token endpoint failed; will attempt session login below
         }
 
         // Fallback to session login if OAuth fails
         try {
             $this->sessionLogin();
-        } catch (RuntimeException $e) {
-            throw new RuntimeException('PhotoPrism authentication failed: OAuth token request and session login both unsuccessful.');
+        } catch (\RuntimeException $e) {
+            throw new \RuntimeException(
+                'PhotoPrism authentication failed: OAuth token request and session login both unsuccessful.'
+            );
         }
     }
 
@@ -343,7 +361,7 @@ class PhotoPrismClient
     private function requestOAuthToken(): array
     {
         if ($this->username === '' || $this->password === '') {
-            throw new RuntimeException('OAuth token request requires username and password.');
+            throw new \RuntimeException('OAuth token request requires username and password.');
         }
 
         $url = $this->baseUrl . '/api/v1/oauth/token';
@@ -381,17 +399,19 @@ class PhotoPrismClient
         curl_close($ch);
 
         if ($response === false) {
-            throw new RuntimeException('OAuth token request failed: ' . $error);
+            throw new \RuntimeException('OAuth token request failed: ' . $error);
         }
 
         $data = json_decode($response, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new RuntimeException('OAuth token endpoint returned invalid JSON: ' . json_last_error_msg());
+            throw new \RuntimeException('OAuth token endpoint returned invalid JSON: ' . json_last_error_msg());
         }
 
         if (($info['http_code'] ?? 0) >= 400) {
             $message = $data['error'] ?? $data['message'] ?? json_encode($data, JSON_UNESCAPED_SLASHES);
-            throw new RuntimeException('OAuth token request failed (' . ($info['http_code'] ?? 'unknown') . '): ' . $message);
+            throw new \RuntimeException(
+                'OAuth token request failed (' . ($info['http_code'] ?? 'unknown') . '): ' . $message
+            );
         }
 
         return is_array($data) ? $data : [];
@@ -400,12 +420,12 @@ class PhotoPrismClient
     /**
      * Attempt PhotoPrism session login (POST /api/v1/session) using username/password.
      * If successful, sets `$this->accessToken` from response fields.
-     * Throws RuntimeException on failure.
+     * Throws \RuntimeException on failure.
      */
     private function sessionLogin(): void
     {
         if ($this->username === '' || $this->password === '') {
-            throw new RuntimeException('Session login requires username and password.');
+            throw new \RuntimeException('Session login requires username and password.');
         }
 
         $body = [
@@ -417,9 +437,12 @@ class PhotoPrismClient
 
         $token = $this->extractAccessToken($response);
         if ($token === null) {
-            // Some PhotoPrism instances may return token in different fields or via cookie; include full response in error
+            // Some PhotoPrism instances may return token in different fields or via cookie;
+            // include full response in error
             $details = json_encode($response, JSON_UNESCAPED_SLASHES);
-            throw new RuntimeException('PhotoPrism session login did not return an access token. Response: ' . $details);
+            throw new \RuntimeException(
+                'PhotoPrism session login did not return an access token. Response: ' . $details
+            );
         }
 
         $this->accessToken = $token;

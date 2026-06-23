@@ -1,6 +1,11 @@
 <?php
+
 require __DIR__ . '/config.php';
 require __DIR__ . '/photoprism_client.php';
+require __DIR__ . '/includes/functions.php';
+
+use function ImageMosaic\respondJson;
+use ImageMosaic\PhotoPrismClient;
 
 $config = include __DIR__ . '/config.php';
 $client = new PhotoPrismClient($config);
@@ -12,26 +17,13 @@ $mosaicColumns = (int) ($config['mosaic_columns'] ?? 12);
 $mosaicRows = (int) ($config['mosaic_rows'] ?? 12);
 $limit = min((int) ($config['mosaic_limit'] ?? 144), $mosaicColumns * $mosaicRows);
 
-function respondJson(array $data, bool $debugMode = false): void
-{
-    if ($debugMode) {
-        $data['debug'] = [
-            'timestamp' => date('c'),
-            'requestUri' => $_SERVER['REQUEST_URI'] ?? '',
-            'phpVersion' => PHP_VERSION,
-        ];
-    }
-
-    echo json_encode($data, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-    exit;
-}
-
 if ($action === 'tiles') {
     $responseDebug = [];
     if ($debugMode) {
         $responseDebug['connection'] = $client->getConnectionDebug();
     }
 
+    $photos = [];
     try {
         $photos = $client->listPhotos($limit);
         $responseDebug['photo_count'] = is_array($photos) ? count($photos) : 0;
@@ -42,7 +34,10 @@ if ($action === 'tiles') {
 
     if (!is_array($photos)) {
         http_response_code(500);
-        respondJson(['error' => 'PhotoPrism API returned an unexpected response type.', 'debug_info' => $responseDebug], $debugMode);
+        respondJson([
+            'error' => 'PhotoPrism API returned an unexpected response type.',
+            'debug_info' => $responseDebug
+        ], $debugMode);
     }
 
     $tiles = [];
@@ -75,7 +70,13 @@ if ($action === 'tiles') {
     while (count($tiles) < $limit) {
         $tiles[] = [
             'title' => 'Empty slot',
-            'thumb' => 'data:image/svg+xml;charset=UTF-8,' . rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100%" height="100%" fill="#333"/><text x="50%" y="50%" fill="#aaa" font-family="Arial,Helvetica,sans-serif" font-size="20" text-anchor="middle" dominant-baseline="middle">No image</text></svg>'),
+            'thumb' => 'data:image/svg+xml;charset=UTF-8,' . rawurlencode(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">' .
+                '<rect width="100%" height="100%" fill="#333"/>' .
+                '<text x="50%" y="50%" fill="#aaa" font-family="Arial,Helvetica,sans-serif" ' .
+                'font-size="20" text-anchor="middle" dominant-baseline="middle">No image</text>' .
+                '</svg>'
+            ),
             'link' => '#',
         ];
     }
