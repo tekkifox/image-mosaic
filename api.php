@@ -40,29 +40,27 @@ if ($action === 'tiles') {
         ], $debugMode);
     }
 
+    $dataUrisByHash = $client->fetchThumbnailsDataUriParallel($photos, 200);
     $tiles = [];
+
     foreach ($photos as $photo) {
-        // Fetch thumbnail and embed as a data URI so the browser does not need auth headers.
-        $thumbDataUri = $client->fetchThumbnailDataUri($photo, 200);
-        if ($thumbDataUri !== null) {
-            $tiles[] = [
-                'title' => $photo['Title'] ?? $photo['title'] ?? '',
-                'thumb' => $thumbDataUri,
-                'link' => $client->getPhotoPageUrl($photo),
-            ];
-            continue;
+        $hash = $client->getPhotoHash($photo);
+        $thumb = null;
+
+        if ($hash !== null && isset($dataUrisByHash[$hash])) {
+            $thumb = $dataUrisByHash[$hash];
+        } else {
+            $thumb = $client->getThumbnailUrl($photo);
         }
 
-        // Fallback to returning the direct thumbnail URL if fetching failed.
-        $thumbUrl = $client->getThumbnailUrl($photo);
-        if ($thumbUrl === null) {
+        if ($thumb === null) {
             $responseDebug['skipped_photos'] = ($responseDebug['skipped_photos'] ?? 0) + 1;
             continue;
         }
 
         $tiles[] = [
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
-            'thumb' => $thumbUrl,
+            'thumb' => $thumb,
             'link' => $client->getPhotoPageUrl($photo),
         ];
     }

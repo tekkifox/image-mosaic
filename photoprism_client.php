@@ -2,6 +2,8 @@
 
 namespace ImageMosaic;
 
+use RuntimeException;
+
 class PhotoPrismClient
 {
     private string $baseUrl;
@@ -70,7 +72,7 @@ class PhotoPrismClient
 
     public function getThumbnailUrl(array $photo, int $size = 224): ?string
     {
-        $hash = $this->getPhotoHashFromArray($photo);
+        $hash = $this->getPhotoHash($photo);
         $previewToken = $this->getPreviewToken();
         if ($hash !== null && $previewToken !== null) {
             return $this->baseUrl . '/api/v1/t/' . rawurlencode($hash) . '/'
@@ -97,7 +99,7 @@ class PhotoPrismClient
     /**
      * Return the SHA1 file hash used by PhotoPrism's /api/v1/t/:hash/:token/:size endpoint.
      */
-    private function getPhotoHashFromArray(array $photo): ?string
+    public function getPhotoHash(array $photo): ?string
     {
         foreach (['Hash', 'hash'] as $k) {
             if (!empty($photo[$k])) {
@@ -171,19 +173,11 @@ class PhotoPrismClient
             return null;
         }
 
-        $headers = $this->buildHeaders(false);
-        $filtered = [];
-        foreach ($headers as $h) {
-            if (stripos($h, 'Accept:') === 0 || stripos($h, 'Content-Type:') === 0) {
-                continue;
-            }
-            $filtered[] = $h;
-        }
-        $filtered[] = 'Accept: image/*';
+        $headers = $this->getThumbnailHeaders();
 
         $ch = curl_init($thumbUrl);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $filtered);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 
@@ -206,6 +200,74 @@ class PhotoPrismClient
         }
 
         return 'data:' . $contentType . ';base64,' . base64_encode($data);
+    }
+
+
+    /**
+     * Fetch multiple thumbnails in parallel and return them as data URIs.
+     * Returns an array mapping original photo hash to data URI.
+     */
+    public function fetchThumbnailsDataUriParallel(array $photos, int $size = 200): array
+    {
+        $multiHandle = curl_multi_init();
+        $handles = [];
+        $photoHashes = [];
+
+        foreach ($photos as $photo) {
+            $hash = $this->getPhotoHash($photo);
+            if ($hash === null) {
+                continue;
+            }
+
+            $thumbUrl = $this->getThumbnailUrl($photo, $size);
+            if ($thumbUrl === null) {
+                continue;
+            }
+
+            $ch = curl_init($thumbUrl);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $this->getThumbnailHeaders());
+            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+            curl_multi_add_handle($multiHandle, $ch);
+
+            $handles[$thumbUrl] = array ($ch, $photo);
+            $photoHashes[$thumbUrl] = $hash;
+        }
+
+        $running = null;
+        do {
+            curl_multi_exec($multiHandle, $running);
+            curl_multi_select($multiHandle);
+        } while ($running > 0);
+
+        $results = [];
+        foreach ($handles as $thumbUrl => $handle) {
+            $ch = $handle[0];
+            $photo = $handle[1];
+            $data = curl_multi_getcontent($ch);
+            $info = curl_getinfo($ch);
+            curl_multi_remove_handle($multiHandle, $ch);
+            curl_close($ch);
+
+            if ($data === false || ($info['http_code'] ?? 0) >= 400) {
+                continue;
+            }
+
+            if (str_starts_with($data, '<svg') || str_starts_with($data, '<?xml')) {
+                continue;
+            }
+
+            $contentType = $info['content_type'] ?? 'image/jpeg';
+            if (str_contains($contentType, ';')) {
+                $contentType = trim(explode(';', $contentType, 2)[0]);
+            }
+            $results[$photoHashes[$thumbUrl]] = 'data:' . $contentType . ';base64,' . base64_encode($data);
+        }
+
+        curl_multi_close($multiHandle);
+
+        return $results;
     }
 
     public function getPhotoPageUrl(array $photo): string
@@ -491,6 +553,23 @@ class PhotoPrismClient
         }
 
         return null;
+    }
+
+    /**
+     * Build headers for thumbnail requests.
+     */
+    private function getThumbnailHeaders(): array
+    {
+        $headers = $this->buildHeaders(false);
+        $filtered = [];
+        foreach ($headers as $h) {
+            if (stripos($h, 'Accept:') === 0 || stripos($h, 'Content-Type:') === 0) {
+                continue;
+            }
+            $filtered[] = $h;
+        }
+        $filtered[] = 'Accept: image/*';
+        return $filtered;
     }
 
     private function buildHeaders(bool $skipAuth = false): array
