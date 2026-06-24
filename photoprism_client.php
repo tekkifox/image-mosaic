@@ -6,6 +6,7 @@ namespace ImageMosaic;
 
 use RuntimeException;
 use InvalidArgumentException;
+use CurlHandle;
 
 class PhotoPrismClient
 {
@@ -115,6 +116,7 @@ class PhotoPrismClient
         $params = ['limit' => $limit, 'order' => $order, 'count' => $limit];
 
         $albumUids = [];
+        $albumTitles = [];
 
         if (!empty($category)) {
             $categoryAlbums = $this->getAlbumsByCategory($category, 100); // Fetch up to 100 albums in category
@@ -790,9 +792,9 @@ class PhotoPrismClient
      * @param string $url
      * @param array $headers
      * @param int|null $timeout
-     * @return resource
+     * @return CurlHandle
      */
-    private function initCurl(string $url, array $headers, ?int $timeout = null)
+    private function initCurl(string $url, array $headers, ?int $timeout = null): CurlHandle
     {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -805,10 +807,10 @@ class PhotoPrismClient
     /**
      * Execute a configured cURL handle and return response, info and error.
      *
-     * @param resource $ch
+     * @param CurlHandle $ch
      * @return array [response:string, info:array, error:string]
      */
-    private function executeCurl($ch): array
+    private function executeCurl(CurlHandle $ch): array
     {
         $response = curl_exec($ch);
         $info = curl_getinfo($ch);
