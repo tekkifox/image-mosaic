@@ -104,6 +104,39 @@ if ($action === 'tiles') {
         $fetchedDetails = $client->fetchPhotosDetailsParallel($missingAlbumIds);
     }
 
+    // Helper: try to extract a taken date from a photo details array or nested Exif.
+    $extractTakenDate = function (array $photo) {
+        // Prefer PhotoPrism-specific normalized fields first. "TakenAtLocal" is
+        // derived from TakenAt and localised using GPS when available, so use it
+        // when present for the most correct human-local date/time.
+        $candidates = [
+            'TakenAtLocal', 'TakenAt', 'takenAt', 'Taken', 'taken',
+            'DateTimeOriginal', 'dateTaken', 'DateTaken',
+            'CreatedAt', 'createdAt', 'Created', 'created',
+            'Date', 'date', 'DateTime', 'dateTime'
+        ];
+
+        // Check top-level keys first
+        foreach ($candidates as $k) {
+            if (isset($photo[$k]) && $photo[$k] !== '') {
+                return $photo[$k];
+            }
+        }
+
+        // Check common EXIF containers
+        foreach (['Exif', 'exif', 'Metadata', 'metadata'] as $exifKey) {
+            if (!empty($photo[$exifKey]) && is_array($photo[$exifKey])) {
+                foreach (['DateTimeOriginal', 'DateTime', 'Date', 'date', 'DateTimeDigitized'] as $k) {
+                    if (!empty($photo[$exifKey][$k])) {
+                        return $photo[$exifKey][$k];
+                    }
+                }
+            }
+        }
+
+        return null;
+    };
+
     // Debug info about album discovery
     $responseDebug['embedded_album_count'] = $embeddedAlbumCount;
     $responseDebug['missing_album_count'] = count($missingAlbumIds);
@@ -141,11 +174,76 @@ if ($action === 'tiles') {
             }
         }
 
+        // Determine a human-friendly taken date when available. Prefer explicit fields,
+        // then Exif, then any fetched details.
+        $takenRaw = $extractTakenDate($photo);
+        $idForDetails = $getPhotoId($photo);
+        if (($takenRaw === null || $takenRaw === '') && $idForDetails !== null && isset($fetchedDetails[$idForDetails]) && is_array($fetchedDetails[$idForDetails])) {
+            $takenRaw = $extractTakenDate($fetchedDetails[$idForDetails]);
+        }
+
+        $takenFormatted = '';
+        if ($takenRaw !== null && $takenRaw !== '') {
+            $dt = null;
+
+            if (is_numeric($takenRaw)) {
+                // Numeric could be seconds or milliseconds since epoch
+                $num = (string) $takenRaw;
+                $ts = (int) $takenRaw;
+                if (strlen($num) > 12) { // likely milliseconds
+                    $ts = (int) floor($ts / 1000);
+                }
+                try {
+                    $dt = (new DateTimeImmutable())->setTimestamp($ts);
+                } catch (\Throwable $e) {
+                    $dt = null;
+                }
+            } else {
+                // Try native parsing (ISO 8601, RFC3339, etc.)
+                try {
+                    $dt = new DateTimeImmutable((string) $takenRaw);
+                } catch (\Throwable $e) {
+                    $dt = null;
+                }
+
+                // Try fixing common EXIF format YYYY:MM:DD HH:MM:SS -> YYYY-MM-DD HH:MM:SS
+                if ($dt === null && preg_match('/^(\d{4}:\d{2}:\d{2})([ T])(\d{2}:\d{2}:\d{2})/', $takenRaw, $m)) {
+                    $norm = str_replace(':', '-', $m[1]) . ' ' . $m[3];
+                    try {
+                        $dt = new DateTimeImmutable($norm);
+                    } catch (\Throwable $e) {
+                        $dt = null;
+                    }
+                }
+
+                // Fallback to strtotime()
+                if ($dt === null) {
+                    $ts2 = @strtotime((string) $takenRaw);
+                    if ($ts2 !== false && $ts2 !== -1) {
+                        try {
+                            $dt = (new DateTimeImmutable())->setTimestamp((int) $ts2);
+                        } catch (\Throwable $e) {
+                            $dt = null;
+                        }
+                    }
+                }
+            }
+
+            if ($dt !== null) {
+                // Format as a friendly date (date only). Preserve the photo's timezone
+                // if the parsed string included one.
+                $takenFormatted = $dt->format('F jS, Y');
+            } else {
+                $takenFormatted = trim((string) $takenRaw);
+            }
+        }
+
         $tiles[] = [
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
             'albums' => $albumTitles,
             'thumb' => $thumb,
             'link' => $client->getPhotoPageUrl($photo),
+            'taken' => $takenFormatted,
         ];
     }
 

@@ -25,17 +25,10 @@
           // image wrapper ensures caption overlays the image itself
           React.createElement('div',{className:'km-lightbox-image-wrap'},
             React.createElement('img',{src: it.full || it.src, alt: it.alt || ''}),
-            React.createElement('div',{className:'km-lightbox-caption'}, it.caption)
+            React.createElement('div',{className:'km-lightbox-caption'}, it.caption + (it.taken ? '\n' + it.taken : ''))
           ),
 
-          // Info Button on full screen image
-          React.createElement('button',{
-            className: 'km-lightbox-info-button',
-            onClick: (e)=>{
-              e.stopPropagation();
-              setInfoItem(it);
-            }
-          }, 'i'),
+          // Info button removed from full screen view (kept on tiles)
 
         React.createElement('button',{className:'km-lightbox-nav km-lightbox-next', onClick: onNext, 'aria-label':'Next'}, '▶')
       )
@@ -66,6 +59,10 @@
             albums.map((album, idx)=>React.createElement('li',{key:idx}, album))
           )
         ),
+        item.taken && React.createElement('div', null,
+          React.createElement('h4', null, 'Taken:'),
+          React.createElement('p', null, item.taken)
+        ),
         React.createElement('p', null, 'Additional details can go here.')
       )
     );
@@ -87,7 +84,13 @@
         if(!mounted) return;
         if(data && Array.isArray(data.tiles)){
           setColumns(data.columns || 12);
-          const mapped = data.tiles.map(t=>({src:t.thumb, full: t.full || t.link || t.thumb, alt: t.title || '', caption: (t.albums||[]).join('\n')}));
+          const mapped = data.tiles.map(t => ({
+            src: t.thumb,
+            full: t.full || t.link || t.thumb,
+            alt: t.title || '',
+            caption: (t.albums || []).join('\n'),
+            taken: t.taken || ''
+          }));
           setItems(mapped);
         }
       }).catch(err=>{
