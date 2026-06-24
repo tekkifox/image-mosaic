@@ -106,8 +106,12 @@ class PhotoPrismClient
         return self::AUTH_TYPE_NONE;
     }
 
-    public function listPhotos(int $limit = 144, string $album = '', string $category = '', string $order = 'random'): array
-    {
+    public function listPhotos(
+        int $limit = 144,
+        string $album = '',
+        string $category = '',
+        string $order = 'random'
+    ): array {
         $params = ['limit' => $limit, 'order' => $order, 'count' => $limit];
 
         $albumUids = [];
@@ -117,8 +121,10 @@ class PhotoPrismClient
             foreach ($categoryAlbums as $catAlbum) {
                 if (!empty($catAlbum['UID'])) {
                     $albumUids[] = $catAlbum['UID'];
+                    $albumTitles[] = $catAlbum['Title'];
                 }
             }
+            $params['q'] = 'albums:"' . implode('|', $albumTitles) . '"';
         }
 
         if (!empty($album)) {
