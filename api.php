@@ -25,7 +25,7 @@ if ($action === 'tiles') {
 
     $photos = [];
     try {
-        $photos = $client->listPhotos($limit);
+        $photos = $client->listPhotos($limit, $_GET['album'] ?? '', $_GET['category'] ?? '');
         $responseDebug['photo_count'] = is_array($photos) ? count($photos) : 0;
     } catch (Throwable $e) {
         http_response_code(500);

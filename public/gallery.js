@@ -82,7 +82,8 @@
       let mounted = true;
       // Start fetch and set an early skeleton based on expected columns
       const controller = new AbortController();
-      fetch('api.php?action=tiles', {signal: controller.signal}).then(r=>r.json()).then(data=>{
+       fetch('api.php?action=tiles&category=Travelling', {signal: controller.signal}).then(r=>r.json()).then(data=>{
+
         if(!mounted) return;
         if(data && Array.isArray(data.tiles)){
           setColumns(data.columns || 12);

@@ -68,7 +68,7 @@
             justify-content: center;
             opacity: 0; /* Hidden by default */
             transition: opacity 0.2s ease;
-            z-index: 2; /* Above the image */
+            z-index: 10 !important; /* Above the image and caption */
         }
         .tile:hover .tile-info-button {
             opacity: 1; /* Show on hover */
@@ -99,16 +99,68 @@
         /* Lightbox CSS */
         .km-lightbox-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;z-index:9999}
         .km-lightbox-backdrop.km-open{display:flex}
-        .km-lightbox-content{max-width:90vw;max-height:90vh;display:flex;align-items:center;justify-content:center;position:relative}
-        .km-lightbox-image-wrap{position:relative;display:inline-block;max-width:100%;max-height:100%}
-        .km-lightbox-content img{max-width:100%;max-height:100%;border-radius:4px;box-shadow:0 10px 30px rgba(0,0,0,.6);display:block}
-        .km-lightbox-close,.km-lightbox-nav{position:absolute;background:rgba(0,0,0,.4);color:#fff;border:0;padding:8px;border-radius:4px;cursor:pointer}
+        .km-lightbox-content{
+            max-width:90vw;
+            max-height:90vh;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            position:relative;
+        }
+        .km-lightbox-image-wrap{
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+            max-height: 100%;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1; /* Base z-index for the image wrapper */
+        }
+        .km-lightbox-content img{
+            max-width:100%;
+            max-height:100%;
+            border-radius:4px;
+            box-shadow:0 10px 30px rgba(0,0,0,.6);
+            display:block;
+            object-fit: contain;
+            position: relative; /* Establishing stacking context */
+            z-index: 1; /* Ensure image is below absolutely positioned buttons */
+        }
+        .km-lightbox-close,.km-lightbox-nav{
+            position:absolute;
+            background:rgba(0,0,0,.4);
+            color:#fff;
+            border:0;
+            padding:8px;
+            border-radius:4px;
+            cursor:pointer
+        }
         .km-lightbox-close{top:16px;right:16px}
         .km-lightbox-nav{top:50%;transform:translateY(-50%)}
         .km-lightbox-prev{left:16px; z-index: 1000 !important;}
         .km-lightbox-next{right:16px; z-index: 1000 !important;}
         /* Caption overlays the bottom center of the image */
-        .km-lightbox-caption{position:absolute; max-height: 50px; top: 90%; left:50%;transform:translateX(-50%);bottom:16px;color:#fff;font-size:14px;max-width:calc(100% - 48px);text-align:center;background:rgba(0,0,0,0.45);padding:8px 12px;border-radius:6px;backdrop-filter:blur(4px);box-shadow:0 6px 18px rgba(0,0,0,0.5);z-index:3;pointer-events:none;white-space:pre-wrap;}
+        .km-lightbox-caption{
+            position:absolute;
+            max-height: 50px;
+            top: 90%;
+            left:50%;
+            transform:translateX(-50%);
+            bottom:16px;
+            color:#fff;
+            font-size:14px;
+            max-width:calc(100% - 48px);
+            text-align:center;
+            background:rgba(0,0,0,0.45);
+            padding:8px 12px;
+            border-radius:6px;
+            backdrop-filter:blur(4px);
+            box-shadow:0 6px 18px rgba(0,0,0,0.5);
+            z-index:3;
+            pointer-events:none;
+            white-space:pre-wrap;
+        }
 
         /* Info Button */
         .km-lightbox-info-button {
@@ -126,14 +178,13 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            opacity: 0; /* Hidden by default */
+            opacity: 1;
             transition: opacity 0.2s ease;
-            z-index: 5; /* Above caption and image */
+            z-index: 10 !important; /* Above caption and image */
         }
         .km-lightbox-image-wrap:hover .km-lightbox-info-button {
             opacity: 1; /* Show on hover of the image wrapper */
         }
-    </style>
 
         /* Info Lightbox Specific Styles */
         .km-info-lightbox .km-lightbox-close {

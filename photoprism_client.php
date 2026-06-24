@@ -106,7 +106,7 @@ class PhotoPrismClient
         return self::AUTH_TYPE_NONE;
     }
 
-    public function listPhotos(int $limit = 144): array
+    public function listPhotos(int $limit = 144, string $album = '', string $category = ''): array
     {
         return $this->request('/photos', ['limit' => $limit, 'order' => 'random', 'count' => $limit]);
     }
