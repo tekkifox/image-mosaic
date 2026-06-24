@@ -144,10 +144,9 @@
         .km-lightbox-caption{
             position:absolute;
             max-height: 50px;
-            top: 90%;
+            top: 85%;
             left:50%;
             transform:translateX(-50%);
-            bottom:16px;
             color:#fff;
             font-size:14px;
             max-width:calc(100% - 48px);
