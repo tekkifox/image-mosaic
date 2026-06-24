@@ -221,6 +221,21 @@
             display: none;
         }
     </style>
+    <!-- Lightbox CSS -->
+    <style>
+    .km-lightbox-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;z-index:9999}
+    .km-lightbox-backdrop.km-open{display:flex}
+    .km-lightbox-content{max-width:90vw;max-height:90vh;display:flex;align-items:center;justify-content:center;position:relative}
+    .km-lightbox-image-wrap{position:relative;display:inline-block;max-width:100%;max-height:100%}
+    .km-lightbox-content img{max-width:100%;max-height:100%;border-radius:4px;box-shadow:0 10px 30px rgba(0,0,0,.6);display:block}
+    .km-lightbox-close,.km-lightbox-nav{position:absolute;background:rgba(0,0,0,.4);color:#fff;border:0;padding:8px;border-radius:4px;cursor:pointer}
+    .km-lightbox-close{top:16px;right:16px}
+    .km-lightbox-nav{top:50%;transform:translateY(-50%)}
+    .km-lightbox-prev{left:16px}
+    .km-lightbox-next{right:16px}
+    /* Caption overlays the bottom center of the image */
+    .km-lightbox-caption{position:absolute;left:50%;transform:translateX(-50%);bottom:16px;color:#fff;font-size:14px;max-width:calc(100% - 48px);text-align:center;background:rgba(0,0,0,0.45);padding:8px 12px;border-radius:6px;backdrop-filter:blur(4px);box-shadow:0 6px 18px rgba(0,0,0,0.5);z-index:3;pointer-events:none}
+    </style>
 </head>
 <body>
     <header>
@@ -228,66 +243,15 @@
         <p class="subtitle">A simple PHP + PhotoPrism frontend showing a 12 by 12 mosaic.</p>
     </header>
 
-    <div id="status" class="loader">Loading mosaic...</div>
     <div id="mosaic"></div>
     <div class="footer">Powered by PhotoPrism API and PHP</div>
 
-    <script>
-        async function loadMosaic() {
-            const status = document.getElementById('status');
-            const mosaic = document.getElementById('mosaic');
+    <!-- React mount point for gallery (will replace mosaic content) -->
+    <div id="react-mosaic-root"></div>
 
-            try {
-                const response = await fetch('api.php?action=tiles');
-                const data = await response.json();
-
-                if (!response.ok || data.error) {
-                    throw new Error(data.error || response.statusText);
-                }
-
-                mosaic.style.gridTemplateColumns = `repeat(${data.columns}, minmax(0, 1fr))`;
-                mosaic.innerHTML = '';
-
-                data.tiles.forEach(tile => {
-                    const item = document.createElement('div');
-                    item.className = 'tile';
-
-                    // --- START: Title/Overlay Implementation ---
-                    const link = document.createElement('a');
-                    link.href = tile.link || '#';
-                    link.target = '_blank';
-                    link.rel = 'noreferrer noopener';
-
-                    // Image element (forms the background)
-                    const image = document.createElement('img');
-                    image.src = tile.thumb;
-                    image.alt = tile.title || 'Photo mosaic tile';
-                    image.loading = 'lazy';
-                    link.appendChild(image);
-
-                    // Album Title Overlay (visible on hover)
-                    if (tile.albums && Array.isArray(tile.albums) && tile.albums.length > 0) {
-                        const titleDiv = document.createElement('div');
-                        titleDiv.className = 'album-overlay';
-                        // Display all titles, joined by ', '.
-                        titleDiv.textContent = tile.albums.join(', '); 
-                        link.appendChild(titleDiv);
-                    }
-                    // --- END: Title/Overlay Implementation ---
-
-                    item.appendChild(link);
-                    mosaic.appendChild(item);
-                    mosaic.appendChild(item);
-                });
-
-                status.style.display = 'none';
-            } catch (error) {
-                status.className = 'error';
-                status.textContent = 'Failed to load mosaic: ' + error.message;
-            }
-        }
-
-        loadMosaic();
-    </script>
+    <!-- React gallery (buildless) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="/public/gallery.js"></script>
 </body>
 </html>
