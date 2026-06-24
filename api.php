@@ -25,7 +25,12 @@ if ($action === 'tiles') {
 
     $photos = [];
     try {
-        $photos = $client->listPhotos($limit, $_GET['album'] ?? '', $_GET['category'] ?? '');
+        $photos = $client->listPhotos(
+            $limit,
+            $_GET['album'] ?? '',
+            $_GET['category'] ?? '',
+            $_GET['order'] ?? 'random'
+        );
         $responseDebug['photo_count'] = is_array($photos) ? count($photos) : 0;
     } catch (Throwable $e) {
         http_response_code(500);
@@ -164,6 +169,31 @@ if ($action === 'tiles') {
         'tiles' => array_slice($tiles, 0, $limit),
         'debug_info' => $responseDebug,
     ], $debugMode);
+}
+
+if ($action === 'albums_by_category') {
+    $responseDebug = [];
+    if ($debugMode) {
+        $responseDebug['connection'] = $client->getConnectionDebug();
+    }
+
+    $category = $_GET['category'] ?? '';
+
+    if (empty($category)) {
+        http_response_code(400);
+        respondJson(['error' => 'Category parameter is required.', 'debug_info' => $responseDebug], $debugMode);
+    }
+
+    try {
+        $albums = $client->getAlbumsByCategory($category);
+        respondJson([
+            'albums' => $albums,
+            'debug_info' => $responseDebug,
+        ], $debugMode);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        respondJson(['error' => $e->getMessage(), 'debug_info' => $responseDebug], $debugMode);
+    }
 }
 
 if ($action === 'debug') {

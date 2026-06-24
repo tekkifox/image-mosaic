@@ -106,9 +106,53 @@ class PhotoPrismClient
         return self::AUTH_TYPE_NONE;
     }
 
-    public function listPhotos(int $limit = 144, string $album = '', string $category = ''): array
+    public function listPhotos(int $limit = 144, string $album = '', string $category = '', string $order = 'random'): array
     {
-        return $this->request('/photos', ['limit' => $limit, 'order' => 'random', 'count' => $limit]);
+        $params = ['limit' => $limit, 'order' => $order, 'count' => $limit];
+
+        $albumUids = [];
+
+        if (!empty($category)) {
+            $categoryAlbums = $this->getAlbumsByCategory($category, 100); // Fetch up to 100 albums in category
+            foreach ($categoryAlbums as $catAlbum) {
+                if (!empty($catAlbum['UID'])) {
+                    $albumUids[] = $catAlbum['UID'];
+                }
+            }
+        }
+
+        if (!empty($album)) {
+            $albumUid = $this->getAlbumUidByName($album);
+            if (!empty($albumUid)) {
+                $params['s'] = $albumUid;
+            }
+        }
+
+        return $this->request('/photos', $params);
+    }
+
+    public function getAlbumsByCategory(string $category, int $limit = 100): array
+    {
+        if (empty($category)) {
+            return [];
+        }
+
+        $params = ['category' => $category, 'count' => $limit, 'order' => 'newest'];
+
+        $response = $this->request('/albums', $params);
+
+        return is_array($response) ? $response : [];
+    }
+
+    private function getAlbumUidByName(string $albumName): ?string
+    {
+        $allAlbums = $this->request('/albums', ['count' => 1000]); // Fetch a large number of albums
+        foreach ($allAlbums as $album) {
+            if (isset($album['Title']) && $album['Title'] === $albumName && isset($album['UID'])) {
+                return (string) $album['UID'];
+            }
+        }
+        return null;
     }
 
     public function getThumbnailUrl(array $photo, int $size = 224): ?string
