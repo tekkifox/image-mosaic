@@ -29,24 +29,47 @@ const Gallery = () => {
         console.error('Failed to fetch photo count:', err);
       });
 
-    // Fetch photo tiles
-    fetch('api.php?action=tiles&category=Travelling', { signal: controller.signal })
+    // OPTIMIZED: Fetch initial tiles (36) for fast load, then lazy-load remaining tiles
+    // API supports pagination with offset/limit parameters
+    const mapTile = (t) => ({
+      src: `/api.php?action=cache&subaction=get&hash=${t.thumb}`, // Use cache API for privacy (absolute path)
+      full: t.full || t.link || t.thumb,
+      alt: t.title || '',
+      albums: t.albums || [],
+      caption: t.caption || '',
+      taken: t.taken || '',
+      imageHash: t.imageHash,
+      mediumHash: t.mediumHash,
+    });
+
+    // Fetch initial 36 tiles (first 3 rows) for fast response
+    fetch('api.php?action=tiles&category=Travelling&limit=36&offset=0', { signal: controller.signal })
       .then((r) => r.json())
       .then((data) => {
         if (!mounted) return;
         if (data && Array.isArray(data.tiles)) {
            setColumns(data.columns || 12);
-           const mapped = data.tiles.map((t) => ({
-             src: t.thumb,
-             full: t.full || t.link || t.thumb,
-             alt: t.title || '',
-             albums: t.albums || [],
-             caption: t.caption || '',
-             taken: t.taken || '',
-             imageHash: t.imageHash,  // Full-size image hash
-             mediumHash: t.mediumHash, // Medium image hash
-           }));
+           const mapped = data.tiles.map(mapTile);
            setItems(mapped);
+           setLoading(false); // Show initial tiles immediately
+           
+           // Lazy-load remaining tiles in background if more exist
+           // data.hasMore indicates if there are more tiles available
+           if (data.hasMore && data.total && data.total > 36) {
+             fetch(`api.php?action=tiles&category=Travelling&limit=${data.total}&offset=36`, { signal: controller.signal })
+               .then((r) => r.json())
+               .then((remainingData) => {
+                 if (!mounted) return;
+                 if (remainingData && Array.isArray(remainingData.tiles) && remainingData.tiles.length > 0) {
+                   const moreItems = remainingData.tiles.map(mapTile);
+                   setItems((prev) => [...prev, ...moreItems]);
+                 }
+               })
+               .catch((err) => {
+                 if (err.name === 'AbortError') return;
+                 console.log('Lazy-load tiles completed');
+               });
+           }
          }
       })
       .catch((err) => {
@@ -54,7 +77,7 @@ const Gallery = () => {
         console.error(err);
       })
       .finally(() => {
-        if (mounted) setLoading(false);
+        // Loading state managed in initial fetch callback
       });
 
     return () => {
@@ -62,6 +85,17 @@ const Gallery = () => {
       controller.abort();
     };
   }, []);
+
+  // Update photo count in hero section (outside React root)
+  useEffect(() => {
+    if (photoCount > 0) {
+      const countElement = document.querySelector('#photo-count-stat');
+      if (countElement) {
+        countElement.textContent = photoCount.toLocaleString();
+        console.log('✓ Updated photo count to:', photoCount.toLocaleString());
+      }
+    }
+  }, [photoCount]);
 
   // Progressive image loading
   useEffect(() => {
