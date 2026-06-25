@@ -334,5 +334,61 @@ if ($action === 'config') {
     ], $debugMode);
 }
 
+if ($action === 'photo-count') {
+    $responseDebug = [];
+    if ($debugMode) {
+        $responseDebug['connection'] = $client->getConnectionDebug();
+    }
+
+    try {
+        $count = $client->getPhotoCount(
+            $_GET['album'] ?? '',
+            $_GET['category'] ?? ''
+        );
+        respondJson([
+            'count' => $count,
+            'debug_info' => $responseDebug,
+        ], $debugMode);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        respondJson(['error' => $e->getMessage(), 'debug_info' => $responseDebug], $debugMode);
+    }
+}
+
+if ($action === 'featured-photo') {
+    $responseDebug = [];
+    if ($debugMode) {
+        $responseDebug['connection'] = $client->getConnectionDebug();
+    }
+
+    $category = $_GET['category'] ?? '';
+    $album = $_GET['album'] ?? '';
+
+    if (empty($category) && empty($album)) {
+        http_response_code(400);
+        respondJson(['error' => 'Either category or album parameter is required.', 'debug_info' => $responseDebug], $debugMode);
+        exit;
+    }
+
+    try {
+        $photo = $client->getFeaturedPhoto($album, $category);
+        if ($photo === null) {
+            http_response_code(404);
+            respondJson(['error' => 'No photos found for the specified category/album.', 'debug_info' => $responseDebug], $debugMode);
+            exit;
+        }
+
+        $thumbUrl = $client->getThumbnailUrl($photo, 500);
+        respondJson([
+            'photo' => $photo,
+            'thumbnail_url' => $thumbUrl,
+            'debug_info' => $responseDebug,
+        ], $debugMode);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        respondJson(['error' => $e->getMessage(), 'debug_info' => $responseDebug], $debugMode);
+    }
+}
+
 http_response_code(404);
 respondJson(['error' => 'Unknown action'], $debugMode);

@@ -139,6 +139,75 @@ class PhotoPrismClient
         return $this->request('/photos', $params);
     }
 
+    /**
+     * Get a single featured photo from a category or album
+     * Returns the newest photo from the specified album or category
+     */
+    public function getFeaturedPhoto(
+        string $album = '',
+        string $category = ''
+    ): ?array {
+        try {
+            // Use listPhotos which handles both album and category filtering correctly
+            $photos = $this->listPhotos(1, $album, $category, 'newest');
+            if (is_array($photos) && count($photos) > 0) {
+                return $photos[0];
+            }
+        } catch (\RuntimeException $e) {
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the total count of photos matching the search criteria
+     * This uses the same filtering logic as listPhotos() but with a large limit
+     */
+    public function getPhotoCount(
+        string $album = '',
+        string $category = ''
+    ): int {
+        // Use a large limit to fetch as many photos as possible
+        $limit = 10000;
+        $params = ['limit' => $limit, 'order' => 'random', 'count' => $limit];
+
+        $albumUids = [];
+        $albumTitles = [];
+
+        // Match the filtering logic from listPhotos()
+        if (!empty($category)) {
+            $categoryAlbums = $this->getAlbumsByCategory($category, 100);
+            foreach ($categoryAlbums as $catAlbum) {
+                if (!empty($catAlbum['UID'])) {
+                    $albumUids[] = $catAlbum['UID'];
+                    $albumTitles[] = $catAlbum['Title'];
+                }
+            }
+            $params['q'] = 'albums:"' . implode('|', $albumTitles) . '"';
+        }
+
+        if (!empty($album)) {
+            $albumUid = $this->getAlbumUidByName($album);
+            if (!empty($albumUid)) {
+                $params['s'] = $albumUid;
+            }
+        }
+
+        // Use the request() method which returns the photo array
+        try {
+            $photos = $this->request('/photos', $params);
+            if (is_array($photos)) {
+                return count($photos);
+            }
+        } catch (\RuntimeException $e) {
+            // Return 0 on error
+            return 0;
+        }
+
+        return 0;
+    }
+
     public function getAlbumsByCategory(string $category, int $limit = 100): array
     {
         if (empty($category)) {

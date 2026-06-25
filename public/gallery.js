@@ -82,13 +82,29 @@
     const [columns, setColumns] = useState(12);
     const [openIndex, setOpenIndex] = useState(-1);
     const [loading, setLoading] = useState(true);
-    const [infoItem, setInfoItem] = useState(null); // New state for info lightbox
+    const [infoItem, setInfoItem] = useState(null);
+    const [photoCount, setPhotoCount] = useState(0);
 
     useEffect(()=>{
       let mounted = true;
-      // Start fetch and set an early skeleton based on expected columns
       const controller = new AbortController();
-       fetch('api.php?action=tiles&category=Travelling', {signal: controller.signal}).then(r=>r.json()).then(data=>{
+      
+      // Fetch photo count for stats
+      fetch('api.php?action=photo-count&category=Travelling', {signal: controller.signal})
+        .then(r=>r.json())
+        .then(data=>{
+          if(!mounted) return;
+          if(data && typeof data.count === 'number'){
+            setPhotoCount(data.count);
+          }
+        })
+        .catch(err=>{
+          if(err.name==='AbortError') return;
+          console.error('Failed to fetch photo count:', err);
+        });
+      
+      // Fetch photo tiles
+      fetch('api.php?action=tiles&category=Travelling', {signal: controller.signal}).then(r=>r.json()).then(data=>{
 
         if(!mounted) return;
          if(data && Array.isArray(data.tiles)){
@@ -103,12 +119,12 @@
            }));
            setItems(mapped);
          }
-      }).catch(err=>{
-        if(err.name==='AbortError') return;
-        console.error(err);
-      }).finally(()=>{ if(mounted) setLoading(false); });
+       }).catch(err=>{
+         if(err.name==='AbortError') return;
+         console.error(err);
+       }).finally(()=>{ if(mounted) setLoading(false); });
 
-      return ()=>{ mounted=false; controller.abort(); };
+       return ()=>{ mounted=false; controller.abort(); };
     }, []);
 
     // progressive image loading: replace src with low-res placeholder then high-res when visible
@@ -133,8 +149,15 @@
      const skeletonCount = columns * columns;
 
      return React.createElement('div', null,
-       React.createElement('div',{id:'mosaic', className: loading ? 'mosaic-loading' : '', style:{display:'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap:0}},
-         (items.length? items : Array.from({length: skeletonCount})).map((it, i)=>React.createElement('div',{key:i, className: `tile ${!items.length ? 'skeleton-tile' : ''}`},
+       React.createElement('div',{id:'mosaic', className: `mosaic-scattered ${loading ? 'mosaic-loading' : ''}`},
+         (items.length? items : Array.from({length: skeletonCount})).map((it, i)=>{
+           const tileRotation = (Math.random()-0.5)*6;
+           const tileOffsetX = (Math.random()-0.5)*20;
+           const tileOffsetY = (Math.random()-0.5)*20;
+           const shadowRotation = tileRotation * 0.3;
+           const shadowOffsetX = Math.sin(shadowRotation * Math.PI / 180) * 15;
+           const shadowOffsetY = Math.cos(shadowRotation * Math.PI / 180) * 15;
+           return React.createElement('div',{key:i, className: `tile tile-scattered ${!items.length ? 'skeleton-tile' : ''}`, style:{transform: items.length ? `rotate(${tileRotation}deg) translateX(${tileOffsetX}px) translateY(${tileOffsetY}px)` : 'none', boxShadow: items.length ? `${shadowOffsetX}px ${shadowOffsetY + 12}px 28px rgba(0,0,0,0.45), ${shadowOffsetX * 0.5}px ${shadowOffsetY * 0.5 + 4}px 12px rgba(0,0,0,0.25)` : 'none'}},
            React.createElement('a',{href:'#', onClick:(e)=>{e.preventDefault(); if(items.length) setOpenIndex(i); }},
              items.length ? React.createElement('img', {src: it.src, 'data-src': it.src, alt: it.alt, loading:'lazy'}) : React.createElement('div', {className:'skeleton-img'})
            ),
@@ -145,9 +168,10 @@
                e.preventDefault();
                setInfoItem(it);
              }
-           }, 'i')
-         ))
-       ),
+            }, 'i')
+          );
+          }),
+        ),
       openIndex>=0 && React.createElement(Lightbox, {items, currentIndex: openIndex, onClose: ()=>setOpenIndex(-1), onPrev: ()=>setOpenIndex((openIndex-1+items.length)%items.length), onNext: ()=>setOpenIndex((openIndex+1)%items.length)}),
       infoItem && React.createElement(InfoLightbox, {item: infoItem, onClose: ()=>setInfoItem(null)}) // Render InfoLightbox
     );
