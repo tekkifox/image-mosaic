@@ -10,7 +10,26 @@ const Gallery = () => {
   const [loading, setLoading] = useState(true);
   const [infoItem, setInfoItem] = useState(null);
   const [photoCount, setPhotoCount] = useState(0);
+  const [totalPhotos, setTotalPhotos] = useState(0);
+  const [currentOffset, setCurrentOffset] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadTriggerRef, setLoadTriggerRef] = useState(null);
 
+  const ITEMS_PER_PAGE = 18;
+
+  const mapTile = (t) => ({
+    src: `/api.php?action=cache&subaction=get&hash=${t.thumb}`, // Use cache API for privacy (absolute path)
+    full: t.full || t.link || t.thumb,
+    alt: t.title || '',
+    albums: t.albums || [],
+    caption: t.caption || '',
+    taken: t.taken || '',
+    imageHash: t.imageHash,
+    mediumHash: t.mediumHash,
+  });
+
+  // Load initial batch of photos and fetch total count
   useEffect(() => {
     let mounted = true;
     const controller = new AbortController();
@@ -29,55 +48,26 @@ const Gallery = () => {
         console.error('Failed to fetch photo count:', err);
       });
 
-    // OPTIMIZED: Fetch initial tiles (36) for fast load, then lazy-load remaining tiles
-    // API supports pagination with offset/limit parameters
-    const mapTile = (t) => ({
-      src: `/api.php?action=cache&subaction=get&hash=${t.thumb}`, // Use cache API for privacy (absolute path)
-      full: t.full || t.link || t.thumb,
-      alt: t.title || '',
-      albums: t.albums || [],
-      caption: t.caption || '',
-      taken: t.taken || '',
-      imageHash: t.imageHash,
-      mediumHash: t.mediumHash,
-    });
-
-    // Fetch initial 36 tiles (first 3 rows) for fast response
-    fetch('api.php?action=tiles&category=Travelling&limit=36&offset=0', { signal: controller.signal })
+    // Fetch initial 20 tiles
+    fetch(`api.php?action=tiles&category=Travelling&limit=${ITEMS_PER_PAGE}&offset=0`, { signal: controller.signal })
       .then((r) => r.json())
       .then((data) => {
         if (!mounted) return;
         if (data && Array.isArray(data.tiles)) {
-           setColumns(data.columns || 12);
-           const mapped = data.tiles.map(mapTile);
-           setItems(mapped);
-           setLoading(false); // Show initial tiles immediately
-           
-           // Lazy-load remaining tiles in background if more exist
-           // data.hasMore indicates if there are more tiles available
-           if (data.hasMore && data.total && data.total > 36) {
-             fetch(`api.php?action=tiles&category=Travelling&limit=${data.total}&offset=36`, { signal: controller.signal })
-               .then((r) => r.json())
-               .then((remainingData) => {
-                 if (!mounted) return;
-                 if (remainingData && Array.isArray(remainingData.tiles) && remainingData.tiles.length > 0) {
-                   const moreItems = remainingData.tiles.map(mapTile);
-                   setItems((prev) => [...prev, ...moreItems]);
-                 }
-               })
-               .catch((err) => {
-                 if (err.name === 'AbortError') return;
-                 console.log('Lazy-load tiles completed');
-               });
-           }
-         }
+          setColumns(data.columns || 12);
+          setTotalPhotos(data.total || 0);
+          setHasMore((data.offset || 0) + (data.tiles?.length || 0) < (data.total || 0));
+          const mapped = data.tiles.map(mapTile);
+          setItems(mapped);
+          setCurrentOffset(ITEMS_PER_PAGE);
+          setLoading(false);
+          console.log(`✓ Loaded initial ${data.tiles.length} tiles, total: ${data.total}`);
+        }
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
-        console.error(err);
-      })
-      .finally(() => {
-        // Loading state managed in initial fetch callback
+        console.error('Failed to fetch initial tiles:', err);
+        setLoading(false);
       });
 
     return () => {
@@ -85,6 +75,55 @@ const Gallery = () => {
       controller.abort();
     };
   }, []);
+
+  // Load more photos when user scrolls near end
+  const loadMorePhotos = () => {
+    if (isLoadingMore || !hasMore) {
+      console.log('Already loading or no more photos');
+      return;
+    }
+
+    setIsLoadingMore(true);
+    console.log(`→ Loading more tiles from offset ${currentOffset}...`);
+
+    fetch(`api.php?action=tiles&category=Travelling&limit=${ITEMS_PER_PAGE}&offset=${currentOffset}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && Array.isArray(data.tiles) && data.tiles.length > 0) {
+          const mapped = data.tiles.map(mapTile);
+          setItems((prev) => [...prev, ...mapped]);
+          const newOffset = currentOffset + data.tiles.length;
+          setCurrentOffset(newOffset);
+          setHasMore(newOffset < (data.total || totalPhotos));
+          console.log(`✓ Loaded ${data.tiles.length} more tiles, total loaded: ${newOffset}`);
+        } else {
+          setHasMore(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load more tiles:', err);
+      })
+      .finally(() => {
+        setIsLoadingMore(false);
+      });
+  };
+
+  // Infinite scroll: use Intersection Observer on a trigger element
+  useEffect(() => {
+    if (!loadTriggerRef || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoadingMore && hasMore) {
+          loadMorePhotos();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+
+    observer.observe(loadTriggerRef);
+    return () => observer.disconnect();
+  }, [loadTriggerRef, hasMore, isLoadingMore, currentOffset]);
 
   // Update photo count in hero section (outside React root)
   useEffect(() => {
@@ -144,6 +183,31 @@ const Gallery = () => {
           />
         ))}
       </div>
+
+      {/* Infinite scroll trigger element - show skeleton placeholders while loading */}
+      {hasMore && isLoadingMore && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(auto-fit, minmax(180px, 1fr))`,
+            gap: '20px',
+            padding: '20px',
+            maxWidth: '1400px',
+            margin: '0 auto',
+          }}
+        >
+          {Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => (
+            <div key={`skeleton-${i}`} className="tile tile-scattered skeleton-tile">
+              <a href="#" onClick={(e) => e.preventDefault()}>
+                <div className="skeleton-img" />
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Trigger element for infinite scroll */}
+      <div ref={setLoadTriggerRef} style={{ height: '20px' }} />
 
       {openIndex >= 0 && (
         <Lightbox
