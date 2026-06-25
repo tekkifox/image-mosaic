@@ -40,16 +40,38 @@
             background: #222;
             transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
-        .tile:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 16px 35px rgba(0, 0, 0, 0.35);
-        }
-        .tile img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: block;
-        }
+         .tile:hover {
+             transform: translateY(-2px);
+             box-shadow: 0 16px 35px rgba(0, 0, 0, 0.35);
+         }
+         .tile img {
+             width: 100%;
+             height: 100%;
+             object-fit: cover;
+             display: block;
+         }
+         /* Skeleton loading styles */
+         .skeleton-tile {
+             background: #222;
+         }
+         .skeleton-img {
+             width: 100%;
+             height: 100%;
+             background: linear-gradient(90deg, #222 25%, #333 50%, #222 75%);
+             background-size: 200% 100%;
+             animation: skeleton-loading 1.5s infinite;
+         }
+         @keyframes skeleton-loading {
+             0% {
+                 background-position: 200% 0;
+             }
+             100% {
+                 background-position: -200% 0;
+             }
+         }
+         .mosaic-loading {
+             opacity: 0.8;
+         }
         /* More Info Button */
         .tile-info-button {
             position: absolute;
@@ -99,24 +121,27 @@
         /* Lightbox CSS */
         .km-lightbox-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;z-index:9999}
         .km-lightbox-backdrop.km-open{display:flex}
-        .km-lightbox-content{
-            max-width:90vw;
-            max-height:90vh;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            position:relative;
-        }
-        .km-lightbox-image-wrap{
-            position: relative;
-            display: inline-block;
-            max-width: 100%;
-            max-height: 100%;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            z-index: 1; /* Base z-index for the image wrapper */
-        }
+         .km-lightbox-content{
+             max-width:90vw;
+             max-height:90vh;
+             display:flex;
+             flex-direction:column;
+             align-items:center;
+             justify-content:center;
+             position:relative;
+         }
+         .km-lightbox-image-wrap{
+             position: relative;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             max-width: 100%;
+             max-height: calc(90vh - 100px);
+             width: 100%;
+             height: auto;
+             overflow: hidden;
+             z-index: 1; /* Base z-index for the image wrapper */
+         }
         .km-lightbox-content img{
             max-width:100%;
             max-height:100%;
@@ -127,39 +152,76 @@
             position: relative; /* Establishing stacking context */
             z-index: 1; /* Ensure image is below absolutely positioned buttons */
         }
-        .km-lightbox-close,.km-lightbox-nav{
-            position:absolute;
-            background:rgba(0,0,0,.4);
-            color:#fff;
-            border:0;
-            padding:8px;
-            border-radius:4px;
-            cursor:pointer
-        }
-        .km-lightbox-close{top:16px;right:16px}
+         .km-lightbox-close,.km-lightbox-nav{
+             position:absolute;
+             background:rgba(0,0,0,.4);
+             color:#fff;
+             border:0;
+             padding:8px;
+             border-radius:4px;
+             cursor:pointer;
+             transition: background 0.2s ease;
+         }
+         .km-lightbox-close:hover,.km-lightbox-nav:hover{
+             background:rgba(0,0,0,.6);
+         }
+         .km-lightbox-close{
+             top:16px;
+             right:16px;
+             z-index:1001;
+             width:40px;
+             height:40px;
+             display:flex;
+             align-items:center;
+             justify-content:center;
+             font-size:24px;
+             background:rgba(0,0,0,.5);
+             border-radius:50%;
+         }
         .km-lightbox-nav{top:50%;transform:translateY(-50%)}
         .km-lightbox-prev{left:16px; z-index: 1000 !important;}
         .km-lightbox-next{right:16px; z-index: 1000 !important;}
-        /* Caption overlays the bottom center of the image */
-        .km-lightbox-caption{
-            position:absolute;
-            max-height: 50px;
-            top: 85%;
-            left:50%;
-            transform:translateX(-50%);
-            color:#fff;
-            font-size:14px;
-            max-width:calc(100% - 48px);
-            text-align:center;
-            background:rgba(0,0,0,0.45);
-            padding:8px 12px;
-            border-radius:6px;
-            backdrop-filter:blur(4px);
-            box-shadow:0 6px 18px rgba(0,0,0,0.5);
-            z-index:3;
-            pointer-events:none;
-            white-space:pre-wrap;
-        }
+         /* Caption displays below the image */
+         .km-lightbox-caption{
+             max-height: 15vh;
+             margin-top: 12px;
+             color:#fff;
+             font-size:13px;
+             max-width:calc(100% - 48px);
+             text-align:center;
+             background:rgba(0,0,0,0.5);
+             padding:12px 16px;
+             border-radius:6px;
+             backdrop-filter:blur(4px);
+             box-shadow:0 6px 18px rgba(0,0,0,0.5);
+             z-index:3;
+             white-space:pre-wrap;
+             overflow-y:auto;
+             line-height: 1.4;
+             flex-shrink: 0;
+         }
+
+         /* Album pills container */
+         .km-albums-container {
+             display: flex;
+             flex-wrap: wrap;
+             gap: 6px;
+             justify-content: center;
+             align-items: center;
+         }
+
+         /* Individual album pill */
+         .km-album-pill {
+             display: inline-block;
+             background: rgba(255, 255, 255, 0.15);
+             border: 1px solid rgba(255, 255, 255, 0.25);
+             color: #fff;
+             padding: 4px 12px;
+             border-radius: 16px;
+             font-size: 12px;
+             white-space: nowrap;
+             backdrop-filter: blur(4px);
+         }
 
         /* Info Button */
         .km-lightbox-info-button {

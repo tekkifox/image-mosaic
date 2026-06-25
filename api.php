@@ -104,6 +104,23 @@ if ($action === 'tiles') {
         $fetchedDetails = $client->fetchPhotosDetailsParallel($missingAlbumIds);
     }
 
+    // Helper: try to extract a caption from a photo details array.
+    $extractCaption = function (array $photo): ?string {
+        $candidates = [
+            'Description', 'description', 'Caption', 'caption',
+            'Desc', 'desc', 'Notes', 'notes'
+        ];
+
+        // Check top-level keys first
+        foreach ($candidates as $k) {
+            if (!empty($photo[$k]) && is_string($photo[$k])) {
+                return (string) $photo[$k];
+            }
+        }
+
+        return null;
+    };
+
     // Helper: try to extract a taken date from a photo details array or nested Exif.
     $extractTakenDate = function (array $photo) {
         // Prefer PhotoPrism-specific normalized fields first. "TakenAtLocal" is
@@ -238,12 +255,19 @@ if ($action === 'tiles') {
             }
         }
 
+        // Extract caption from photo or fetched details
+        $caption = $extractCaption($photo);
+        if (($caption === null || $caption === '') && $idForDetails !== null && isset($fetchedDetails[$idForDetails]) && is_array($fetchedDetails[$idForDetails])) {
+            $caption = $extractCaption($fetchedDetails[$idForDetails]);
+        }
+
         $tiles[] = [
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
             'albums' => $albumTitles,
             'thumb' => $thumb,
             'link' => $client->getPhotoPageUrl($photo),
             'taken' => $takenFormatted,
+            'caption' => $caption ?? '',
         ];
     }
 
@@ -258,6 +282,7 @@ if ($action === 'tiles') {
                 '</svg>'
             ),
             'link' => '#',
+            'caption' => '',
         ];
     }
 

@@ -17,22 +17,30 @@
     if(currentIndex<0 || currentIndex>=items.length) return null;
     const it = items[currentIndex];
 
-    return React.createElement('div',{className:'km-lightbox-backdrop km-open', onClick: (e)=>{ if(e.target===e.currentTarget) onClose(); }},
-      React.createElement('div',{className:'km-lightbox-content'},
-        React.createElement('button',{className:'km-lightbox-close', onClick: onClose, 'aria-label':'Close'}, '✕'),
-        items.length > 1 && React.createElement('button',{className:'km-lightbox-nav km-lightbox-prev', onClick: onPrev, 'aria-label':'Previous'}, '◀'),
+     return React.createElement('div',{className:'km-lightbox-backdrop km-open', onClick: (e)=>{ if(e.target===e.currentTarget) onClose(); }},
+       React.createElement('div',{className:'km-lightbox-content'},
+         React.createElement('button',{className:'km-lightbox-close', onClick: onClose, 'aria-label':'Close'}, '✕'),
+         items.length > 1 && React.createElement('button',{className:'km-lightbox-nav km-lightbox-prev', onClick: onPrev, 'aria-label':'Previous'}, '◀'),
 
-          // image wrapper ensures caption overlays the image itself
-          React.createElement('div',{className:'km-lightbox-image-wrap'},
-            React.createElement('img',{src: it.full || it.src, alt: it.alt || ''}),
-            React.createElement('div',{className:'km-lightbox-caption'}, it.caption + (it.taken ? '\n' + it.taken : ''))
-          ),
+           // image wrapper
+           React.createElement('div',{className:'km-lightbox-image-wrap'},
+             React.createElement('img',{src: it.full || it.src, alt: it.alt || ''})
+           ),
 
-          // Info button removed from full screen view (kept on tiles)
+           // caption positioned outside image-wrap to avoid clipping
+           React.createElement('div',{className:'km-lightbox-caption'}, 
+             [
+               it.caption ? React.createElement('div', {key: 'caption', style:{marginBottom: it.caption && (it.albums || []).length > 0 ? '8px' : '0'}}, it.caption) : null,
+               (it.albums || []).length > 0 ? React.createElement('div', {key: 'albums', className:'km-albums-container', style:{marginBottom: (it.albums || []).length > 0 && it.taken ? '8px' : '0'}}, 
+                 (it.albums || []).map((album, idx) => React.createElement('span', {key: idx, className:'km-album-pill'}, album))
+               ) : null,
+               it.taken ? React.createElement('div', {key: 'taken'}, it.taken) : null
+             ].filter(Boolean)
+           ),
 
-        React.createElement('button',{className:'km-lightbox-nav km-lightbox-next', onClick: onNext, 'aria-label':'Next'}, '▶')
-      )
-    );
+         React.createElement('button',{className:'km-lightbox-nav km-lightbox-next', onClick: onNext, 'aria-label':'Next'}, '▶')
+       )
+     );
   }
 
   function InfoLightbox({item, onClose}){
@@ -47,23 +55,24 @@
 
     if(!item) return null;
 
-    const albums = item.caption ? item.caption.split('\n') : [];
-
     return React.createElement('div',{className:'km-lightbox-backdrop km-open km-info-lightbox', onClick: (e)=>{ if(e.target===e.currentTarget) onClose(); }},
       React.createElement('div',{className:'km-info-lightbox-content'},
         React.createElement('button',{className:'km-lightbox-close', onClick: onClose, 'aria-label':'Close'}, '✕'),
         React.createElement('h3', null, item.alt || 'Image Info'),
-        albums.length > 0 && React.createElement('div', null,
+        item.caption && React.createElement('div', null,
+          React.createElement('h4', null, 'Caption:'),
+          React.createElement('p', null, item.caption)
+        ),
+        item.albums && item.albums.length > 0 && React.createElement('div', null,
           React.createElement('h4', null, 'Albums:'),
           React.createElement('ul', null,
-            albums.map((album, idx)=>React.createElement('li',{key:idx}, album))
+            item.albums.map((album, idx)=>React.createElement('li',{key:idx}, album))
           )
         ),
         item.taken && React.createElement('div', null,
           React.createElement('h4', null, 'Taken:'),
           React.createElement('p', null, item.taken)
-        ),
-        React.createElement('p', null, 'Additional details can go here.')
+        )
       )
     );
   }
@@ -82,17 +91,18 @@
        fetch('api.php?action=tiles&category=Travelling', {signal: controller.signal}).then(r=>r.json()).then(data=>{
 
         if(!mounted) return;
-        if(data && Array.isArray(data.tiles)){
-          setColumns(data.columns || 12);
-          const mapped = data.tiles.map(t => ({
-            src: t.thumb,
-            full: t.full || t.link || t.thumb,
-            alt: t.title || '',
-            caption: (t.albums || []).join('\n'),
-            taken: t.taken || ''
-          }));
-          setItems(mapped);
-        }
+         if(data && Array.isArray(data.tiles)){
+           setColumns(data.columns || 12);
+           const mapped = data.tiles.map(t => ({
+             src: t.thumb,
+             full: t.full || t.link || t.thumb,
+             alt: t.title || '',
+             albums: t.albums || [],
+             caption: t.caption || '',
+             taken: t.taken || ''
+           }));
+           setItems(mapped);
+         }
       }).catch(err=>{
         if(err.name==='AbortError') return;
         console.error(err);
@@ -119,28 +129,25 @@
       return ()=> io.disconnect();
     }, [items]);
 
-    // Render skeleton tiles when loading to match API speed
-    const skeletonCount = 12;
+     // Render skeleton tiles when loading to match API speed
+     const skeletonCount = columns * columns;
 
-    return React.createElement('div', null,
-      React.createElement('div',{id:'status', className:'loader', style:{display: loading ? 'block' : 'none'}}, 'Loading mosaic...'),
-      React.createElement('div',{id:'mosaic', style:{display:'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap:0}},
-        (items.length? items : Array.from({length: skeletonCount})).map((it, i)=>React.createElement('div',{key:i, className:'tile'},
-          React.createElement('a',{href:'#', onClick:(e)=>{e.preventDefault(); if(items.length) setOpenIndex(i); }},
-            React.createElement('img', it? {src: it.src, 'data-src': it.src, alt: it.alt, loading:'lazy'} : {src:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', alt:'loading'}),
-            null /* Album titles removed as per user request */
-          ),
-          // More Info Button
-          React.createElement('button',{
-            className: 'tile-info-button',
-            onClick: (e)=>{
-              e.stopPropagation(); // Prevent opening lightbox
-              e.preventDefault();
-              setInfoItem(it);
-            }
-          }, 'i')
-        ))
-      ),
+     return React.createElement('div', null,
+       React.createElement('div',{id:'mosaic', className: loading ? 'mosaic-loading' : '', style:{display:'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap:0}},
+         (items.length? items : Array.from({length: skeletonCount})).map((it, i)=>React.createElement('div',{key:i, className: `tile ${!items.length ? 'skeleton-tile' : ''}`},
+           React.createElement('a',{href:'#', onClick:(e)=>{e.preventDefault(); if(items.length) setOpenIndex(i); }},
+             items.length ? React.createElement('img', {src: it.src, 'data-src': it.src, alt: it.alt, loading:'lazy'}) : React.createElement('div', {className:'skeleton-img'})
+           ),
+           items.length && React.createElement('button',{
+             className: 'tile-info-button',
+             onClick: (e)=>{
+               e.stopPropagation();
+               e.preventDefault();
+               setInfoItem(it);
+             }
+           }, 'i')
+         ))
+       ),
       openIndex>=0 && React.createElement(Lightbox, {items, currentIndex: openIndex, onClose: ()=>setOpenIndex(-1), onPrev: ()=>setOpenIndex((openIndex-1+items.length)%items.length), onNext: ()=>setOpenIndex((openIndex+1)%items.length)}),
       infoItem && React.createElement(InfoLightbox, {item: infoItem, onClose: ()=>setInfoItem(null)}) // Render InfoLightbox
     );
