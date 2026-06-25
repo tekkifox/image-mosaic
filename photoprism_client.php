@@ -294,7 +294,12 @@ class PhotoPrismClient
         if ($size <= 500) {
             return 'tile_500';
         }
-        if ($size > 500) {
+        // For medium size, use tile_500 (not full-size)
+        if ($size <= 800) {
+            return 'tile_500';
+        }
+        // For anything larger, use fit_5120 (full resolution)
+        if ($size > 800) {
             return 'fit_5120';
         }
 
@@ -470,18 +475,6 @@ class PhotoPrismClient
         curl_multi_close($multiHandle);
 
         return $results;
-    }
-
-    public function getPhotoPageUrl(array $photo): string
-    {
-        // Accept various key casings for the photo identifier.
-        $candidates = ['uuid', 'UUID', 'uid', 'UID', 'id', 'ID'];
-        foreach ($candidates as $k) {
-            if (!empty($photo[$k])) {
-                return $this->getThumbnailUrl($photo, 5120);
-            }
-        }
-        return $this->baseUrl;
     }
 
     /**

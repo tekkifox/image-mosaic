@@ -212,28 +212,23 @@
     <footer>
         <p>🌏 Asia Pacific 2016: A Journey of Discovery</p>
         <p>9 months, 8 countries, countless memories</p>
-        <p style="margin-top: 1.5rem; font-size: 0.9rem; color: #64b5f6;">Photo Gallery powered by PhotoPrism</p>
     </footer>
 
     <!-- Fetch live photo count for stats -->
     <script>
-        fetch('api.php?action=photo-count&category=Travelling')
-            .then(r => r.json())
-            .then(data => {
-                if (data && typeof data.count === 'number') {
-                    const photoCountStat = document.getElementById('photo-count-stat');
-                    if (photoCountStat) {
-                        // Format number with thousands separator
-                        photoCountStat.textContent = data.count.toLocaleString();
-                    }
-                }
-            })
-            .catch(err => console.error('Failed to fetch photo count:', err));
-    </script>
+        // Stats calculation for hero section
+        const totalPhotos = 4873;
+        const startYear = 2016;
+        const endYear = 2016;
+        const visitedCountries = 5;
 
-    <!-- React gallery (buildless) -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="/public/gallery.js"></script>
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelector('#total-photos').textContent = totalPhotos.toLocaleString();
+            document.querySelector('#visited-countries').textContent = visitedCountries;
+            document.querySelector('#travel-period').textContent = `${startYear}${startYear !== endYear ? '–' + endYear : ''}`;
+        });
+    </script>
+    <!-- React Gallery Bundle (compiled with webpack) -->
+    <script src="/dist/gallery.min.js"></script>
 </body>
 </html>

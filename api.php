@@ -2,10 +2,14 @@
 
 require __DIR__ . '/config.php';
 require __DIR__ . '/photoprism_client.php';
+require __DIR__ . '/cache_manager.php';
+require __DIR__ . '/image_url_mapper.php';
 require __DIR__ . '/includes/functions.php';
 
 use function ImageMosaic\respondJson;
 use ImageMosaic\PhotoPrismClient;
+use ImageMosaic\CacheManager;
+use ImageMosaic\ImageUrlMapper;
 
 $config = include __DIR__ . '/config.php';
 $client = new PhotoPrismClient($config);
@@ -261,11 +265,29 @@ if ($action === 'tiles') {
             $caption = $extractCaption($fetchedDetails[$idForDetails]);
         }
 
+        // Get full-resolution image URL for lightbox (fit_5120 for maximum quality)
+        $fullImageUrl = $client->getThumbnailUrl($photo, 2000) ?? $client->getThumbnailUrl($photo, 500) ?? $thumb;
+        
+        // Map URLs to hashes for privacy (hide PhotoPrism URLs from frontend)
+        // Frontend will use these hashes to request images, backend will lookup the URLs
+        $urlMapper = new ImageUrlMapper();
+        $urlMapper->loadMappings();
+        
+        // Hash for full-resolution image (for lightbox) - size 2000 gives fit_5120
+        $fullImageHash = $urlMapper->mapUrl($fullImageUrl);
+        
+        // Hash for medium-resolution image (for prefetch optimization) - size 500 gives tile_500
+        $mediumImageUrl = $client->getThumbnailUrl($photo, 500) ?? $fullImageUrl;
+        $mediumImageHash = $urlMapper->mapUrl($mediumImageUrl);
+        
+        $urlMapper->persistMappings();
+
         $tiles[] = [
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
             'albums' => $albumTitles,
             'thumb' => $thumb,
-            'link' => $client->getPhotoPageUrl($photo),
+            'imageHash' => $fullImageHash,    // ← Full-size hash for lightbox
+            'mediumHash' => $mediumImageHash, // ← Medium hash for prefetch (faster)
             'taken' => $takenFormatted,
             'caption' => $caption ?? '',
         ];
@@ -274,6 +296,7 @@ if ($action === 'tiles') {
     while (count($tiles) < $limit) {
         $tiles[] = [
             'title' => 'Empty slot',
+            'albums' => [],
             'thumb' => 'data:image/svg+xml;charset=UTF-8,' . rawurlencode(
                 '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">' .
                 '<rect width="100%" height="100%" fill="#333"/>' .
@@ -281,7 +304,8 @@ if ($action === 'tiles') {
                 'font-size="20" text-anchor="middle" dominant-baseline="middle">No image</text>' .
                 '</svg>'
             ),
-            'link' => '#',
+            'full' => '#',
+            'taken' => '',
             'caption' => '',
         ];
     }
@@ -388,6 +412,141 @@ if ($action === 'featured-photo') {
         http_response_code(500);
         respondJson(['error' => $e->getMessage(), 'debug_info' => $responseDebug], $debugMode);
     }
+}
+
+if ($action === 'cache') {
+    $cache = new CacheManager('public/cache');
+    $urlMapper = new ImageUrlMapper();
+    $urlMapper->loadMappings();
+    
+    $subaction = $_GET['subaction'] ?? 'get';
+    $responseDebug = [];
+
+    // GET: Fetch and cache image by hash (URL is looked up internally)
+    if ($subaction === 'get') {
+        $imageHash = $_GET['hash'] ?? '';
+        if (empty($imageHash)) {
+            http_response_code(400);
+            respondJson(['error' => 'Hash parameter required'], $debugMode);
+            exit;
+        }
+        
+        // Look up actual PhotoPrism URL from hash
+        $photoUrl = $urlMapper->getUrlFromHash($imageHash);
+        if (!$photoUrl) {
+            http_response_code(404);
+            respondJson(['error' => 'Image hash not found'], $debugMode);
+            exit;
+        }
+
+        try {
+            $content = $cache->get($photoUrl, 30 * 24 * 60 * 60); // 30 days TTL
+            $metadata = $cache->getMetadata($photoUrl);
+            
+            // Detect MIME type from file extension or content
+            $ext = strtolower(pathinfo($photoUrl, PATHINFO_EXTENSION));
+            $mimeType = 'application/octet-stream';
+            
+            $mimeTypes = [
+                'jpg' => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png' => 'image/png',
+                'gif' => 'image/gif',
+                'webp' => 'image/webp',
+                'bmp' => 'image/bmp',
+            ];
+            
+            if (isset($mimeTypes[$ext])) {
+                $mimeType = $mimeTypes[$ext];
+            } else {
+                // Fallback: try to detect from image data
+                $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                $mimeType = finfo_buffer($finfo, $content) ?: $mimeType;
+                finfo_close($finfo);
+            }
+
+            // Optimize headers for faster delivery
+            header('Content-Type: ' . $mimeType);
+            header('Content-Length: ' . strlen($content));
+            header('Cache-Control: public, max-age=2592000, immutable'); // 30 days + immutable
+            header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 2592000) . ' GMT');
+            header('X-Content-Type-Options: nosniff');
+            header('X-Cache-Status: hit');
+            
+            // Don't compress image responses - images are already compressed
+            // and re-compression can cause issues with blob URLs
+            header('Content-Encoding: identity');
+            
+            if ($metadata) {
+                header('X-Cache-Age: ' . $metadata['age_seconds']);
+                header('X-Cache-Size: ' . $metadata['size']);
+            }
+            
+            // Stream content with output buffering disabled for faster delivery
+            if (!ob_get_level()) {
+                ob_start(null, 0, PHP_OUTPUT_HANDLER_FLUSHABLE);
+            }
+            echo $content;
+            flush();
+            exit;
+        } catch (Throwable $e) {
+            http_response_code(500);
+            respondJson(['error' => 'Failed to cache image: ' . $e->getMessage()], $debugMode);
+            exit;
+        }
+    }
+
+    // INFO: Get cache metadata by hash
+    if ($subaction === 'info') {
+        $imageHash = $_GET['hash'] ?? '';
+        if (empty($imageHash)) {
+            http_response_code(400);
+            respondJson(['error' => 'Hash parameter required'], $debugMode);
+            exit;
+        }
+
+        $photoUrl = $urlMapper->getUrlFromHash($imageHash);
+        if (!$photoUrl) {
+            http_response_code(404);
+            respondJson(['error' => 'Image hash not found'], $debugMode);
+            exit;
+        }
+
+        $metadata = $cache->getMetadata($photoUrl);
+        if ($metadata === null) {
+            http_response_code(404);
+            respondJson(['error' => 'Image not in cache', 'cached' => false], $debugMode);
+            exit;
+        }
+
+        respondJson(['cached' => true, 'metadata' => $metadata, 'debug_info' => $responseDebug], $debugMode);
+        exit;
+    }
+
+    // STATS: Get cache statistics
+    if ($subaction === 'stats') {
+        $stats = $cache->getStats();
+        respondJson(['stats' => $stats, 'debug_info' => $responseDebug], $debugMode);
+        exit;
+    }
+
+    // CLEANUP: Remove expired cache files
+    if ($subaction === 'cleanup') {
+        $removed = $cache->cleanup();
+        respondJson(['removed' => $removed, 'debug_info' => $responseDebug], $debugMode);
+        exit;
+    }
+
+    // FLUSH: Clear all cache
+    if ($subaction === 'flush') {
+        $removed = $cache->flush();
+        respondJson(['removed' => $removed, 'debug_info' => $responseDebug], $debugMode);
+        exit;
+    }
+
+    http_response_code(400);
+    respondJson(['error' => 'Unknown cache subaction'], $debugMode);
+    exit;
 }
 
 http_response_code(404);
