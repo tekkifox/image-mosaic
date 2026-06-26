@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Gallery from '@components/Gallery';
+import CountryPlaces from '@components/CountryPlaces';
 import './styles/index.css';
 
 // Register Service Worker for offline caching and performance
@@ -19,3 +20,9 @@ import './styles/index.css';
 
 const root = ReactDOM.createRoot(document.getElementById('react-mosaic-root'));
 root.render(<Gallery />);
+
+const placesRootElement = document.getElementById('country-places-root');
+if (placesRootElement) {
+  const placesRoot = ReactDOM.createRoot(placesRootElement);
+  placesRoot.render(<CountryPlaces />);
+}

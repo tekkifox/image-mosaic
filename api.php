@@ -409,6 +409,311 @@ if ($action === 'config') {
     ], $debugMode);
 }
 
+if ($action === 'country-places') {
+    $responseDebug = [];
+    if ($debugMode) {
+        $responseDebug['connection'] = $client->getConnectionDebug();
+    }
+
+    $placesCacheKey = 'country_places_v7_' . md5(($_GET['category'] ?? 'all') . '|' . ($_GET['album'] ?? 'all') . '|' . ($_GET['order'] ?? 'newest'));
+    $placesCachePath = 'public/cache/.' . $placesCacheKey . '.json';
+    $placesCacheTTL = 3600;
+
+    if (file_exists($placesCachePath)) {
+        $stat = stat($placesCachePath);
+        if ($stat && (time() - $stat['mtime']) < $placesCacheTTL) {
+            $cached = json_decode(file_get_contents($placesCachePath), true);
+            if (is_array($cached)) {
+                respondJson($cached, $debugMode);
+                exit;
+            }
+        }
+    }
+
+    try {
+        $photos = $client->listPhotos(
+            $maxLimit,
+            $_GET['album'] ?? '',
+            $_GET['category'] ?? '',
+            $_GET['order'] ?? 'random'
+        );
+        $responseDebug['photo_count'] = is_array($photos) ? count($photos) : 0;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        respondJson(['error' => $e->getMessage(), 'debug_info' => $responseDebug], $debugMode);
+        exit;
+    }
+
+    if (!is_array($photos) || empty($photos)) {
+        respondJson([
+            'countries' => [],
+            'debug_info' => $responseDebug,
+        ], $debugMode);
+        exit;
+    }
+
+    $getPhotoId = function (array $photo): ?string {
+        foreach (['uuid', 'UUID', 'uid', 'UID', 'id', 'ID'] as $k) {
+            if (!empty($photo[$k])) {
+                return (string) $photo[$k];
+            }
+        }
+        return null;
+    };
+
+    $extractStringValue = function (array $source, array $keys): ?string {
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $source)) {
+                continue;
+            }
+
+            $value = $source[$key];
+            if (is_string($value) || is_numeric($value)) {
+                $value = trim((string) $value);
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return null;
+    };
+
+    $normalizePlaceText = function (?string $text): ?string {
+        if ($text === null) {
+            return null;
+        }
+
+        $value = trim($text);
+        if ($value === '') {
+            return null;
+        }
+
+        if (function_exists('transliterator_transliterate')) {
+            $transliterated = transliterator_transliterate('Any-Latin; Latin-ASCII', $value);
+            if (is_string($transliterated) && trim($transliterated) !== '') {
+                $value = $transliterated;
+            }
+        }
+
+        $value = preg_replace('/\s+/u', ' ', $value);
+        return trim((string) $value);
+    };
+
+    $countryToFullName = function (string $country) use ($normalizePlaceText): string {
+        $value = trim($country);
+        if ($value === '') {
+            return $value;
+        }
+
+        $normalized = strtoupper($value);
+        if (preg_match('/^[A-Z]{2}$/', $normalized)) {
+            $fullName = Locale::getDisplayRegion('und-' . $normalized, 'en');
+            if (is_string($fullName) && $fullName !== '' && $fullName !== $normalized) {
+                return $normalizePlaceText($fullName) ?? $fullName;
+            }
+        }
+
+        return $normalizePlaceText($value) ?? $value;
+    };
+
+    $stripCountryFromPlace = function (?string $label, ?string $country) use ($normalizePlaceText): ?string {
+        $place = $normalizePlaceText($label);
+
+        if ($place === null || $place === '') {
+            return $place;
+        }
+
+        $countryName = $normalizePlaceText($country);
+        if ($countryName === null || $countryName === '') {
+            return $place;
+        }
+
+        $placeLower = mb_strtolower($place);
+        $countryLower = mb_strtolower($countryName);
+
+        $suffixes = [
+            ', ' . $countryLower,
+            ' - ' . $countryLower,
+            ' ' . $countryLower,
+            ", Viet Nam",
+        ];
+
+        foreach ($suffixes as $suffix) {
+            if (str_ends_with($placeLower, $suffix)) {
+                $trimmed = trim(substr($place, 0, strlen($place) - strlen($suffix)));
+                if ($trimmed !== '') {
+                    return $trimmed;
+                }
+            }
+        }
+
+        return str_replace(", Viet Nam", '', $place);
+    };
+
+    $extractLocation = function (array $photo, ?array $details = null) use ($extractStringValue, $countryToFullName, $normalizePlaceText, $stripCountryFromPlace): ?array {
+        $sources = [];
+        if (is_array($details)) {
+            $sources[] = $details;
+        }
+        $sources[] = $photo;
+
+        $placeSources = [];
+        foreach ($sources as $source) {
+            if (!is_array($source)) {
+                continue;
+            }
+
+            $placeSources[] = $source;
+            foreach (['place', 'Place', 'location', 'Location'] as $nestedKey) {
+                if (!empty($source[$nestedKey]) && is_array($source[$nestedKey])) {
+                    $placeSources[] = $source[$nestedKey];
+                }
+            }
+        }
+
+        foreach ($placeSources as $source) {
+            if (!is_array($source)) {
+                continue;
+            }
+
+            $placeNode = $source;
+            foreach (['Place', 'place', 'Location', 'location'] as $nestedKey) {
+                if (!empty($source[$nestedKey]) && is_array($source[$nestedKey])) {
+                    $placeNode = $source[$nestedKey];
+                    break;
+                }
+            }
+
+            $label = $normalizePlaceText($extractStringValue($placeNode, ['Label', 'label', 'PlaceLabel', 'placeLabel']));
+            $city = $normalizePlaceText($extractStringValue($placeNode, ['City', 'city', 'PlaceCity', 'placeCity']));
+            $state = $normalizePlaceText($extractStringValue($placeNode, ['State', 'state', 'Region', 'region', 'PlaceState', 'placeState']));
+            $country = $extractStringValue($placeNode, ['Country', 'country', 'PlaceCountry', 'placeCountry']);
+
+            if ($label === null || $label === '') {
+                $pieces = array_values(array_filter([$city, $state, $country], fn($v) => $v !== null && $v !== ''));
+                if (!empty($pieces)) {
+                    $label = implode(', ', array_values(array_unique($pieces)));
+                }
+            }
+
+            if (($country === null || $country === '') && $label !== null && str_contains($label, ',')) {
+                $parts = array_values(array_filter(array_map('trim', explode(',', $label))));
+                if (!empty($parts)) {
+                    $country = $parts[count($parts) - 1];
+                }
+            }
+
+            if ($country !== null && $country !== '') {
+                $country = $countryToFullName($country);
+            }
+
+            if ($country !== null && $country !== '') {
+                $country = $normalizePlaceText($country) ?? $country;
+            }
+
+            $label = $stripCountryFromPlace($label, $country);
+
+            if ($label !== null && $label !== '' && $country !== null && $country !== '') {
+                return [
+                    'country' => trim($country),
+                    'place' => trim($label),
+                ];
+            }
+        }
+
+        return null;
+    };
+
+    $photoIds = [];
+    foreach ($photos as $photo) {
+        $id = $getPhotoId($photo);
+        if ($id !== null) {
+            $photoIds[] = $id;
+        }
+    }
+
+    $photoIds = array_values(array_unique($photoIds));
+
+    $fetchedDetails = !empty($photoIds) ? $client->fetchPhotosDetailsParallel($photoIds) : [];
+
+    $countries = [];
+    $excludedCountries = ['hungary', 'france', 'unknown region'];
+    foreach ($photos as $photo) {
+        $id = $getPhotoId($photo);
+        $details = ($id !== null && isset($fetchedDetails[$id]) && is_array($fetchedDetails[$id])) ? $fetchedDetails[$id] : null;
+        $location = $extractLocation($photo, $details);
+
+        if ($location === null) {
+            continue;
+        }
+
+        $countryLabel = trim($location['country']);
+        $placeLabel = trim($location['place']);
+        if ($countryLabel === '' || $placeLabel === '') {
+            continue;
+        }
+
+        if (in_array(strtolower($countryLabel), $excludedCountries, true)) {
+            continue;
+        }
+
+        $countryKey = strtolower($countryLabel);
+        if (!isset($countries[$countryKey])) {
+            $countries[$countryKey] = [
+                'country' => $countryLabel,
+                'photoCount' => 0,
+                'places' => [],
+            ];
+        }
+
+        $countries[$countryKey]['photoCount']++;
+        $placeKey = strtolower($placeLabel);
+        if (!isset($countries[$countryKey]['places'][$placeKey])) {
+            $countries[$countryKey]['places'][$placeKey] = [
+                'name' => $placeLabel,
+                'count' => 0,
+            ];
+        }
+        $countries[$countryKey]['places'][$placeKey]['count']++;
+    }
+
+    $countryList = [];
+    foreach ($countries as $country) {
+        $places = array_values($country['places']);
+        usort($places, static function (array $a, array $b): int {
+            if ($a['count'] === $b['count']) {
+                return strcmp($a['name'], $b['name']);
+            }
+            return $b['count'] <=> $a['count'];
+        });
+
+        $countryList[] = [
+            'country' => $country['country'],
+            'photoCount' => $country['photoCount'],
+            'places' => array_slice($places, 0, 6),
+        ];
+    }
+
+    usort($countryList, static function (array $a, array $b): int {
+        if ($a['photoCount'] === $b['photoCount']) {
+            return strcmp($a['country'], $b['country']);
+        }
+        return $b['photoCount'] <=> $a['photoCount'];
+    });
+
+    $payload = [
+        'countries' => $countryList,
+        'debug_info' => $responseDebug,
+    ];
+
+    @mkdir('public/cache', 0755, true);
+    @file_put_contents($placesCachePath, json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
+
+    respondJson($payload, $debugMode);
+    exit;
+}
+
 if ($action === 'photo-count') {
     $responseDebug = [];
     if ($debugMode) {

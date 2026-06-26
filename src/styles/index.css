@@ -126,6 +126,136 @@ main {
     padding: 60px 20px;
 }
 
+/* Country Overview */
+.country-overview {
+    max-width: 1400px;
+    margin: 0 auto 80px;
+    padding: 0 20px;
+}
+
+.section-heading {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.section-heading h2 {
+    font-size: 2.5rem;
+    color: #64b5f6;
+    margin-bottom: 0.75rem;
+}
+
+.section-heading p {
+    color: #b0bec5;
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.country-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.25rem;
+}
+
+.country-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(100, 181, 246, 0.2);
+    border-radius: 16px;
+    padding: 1.25rem;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.2);
+}
+
+.country-card-header {
+    margin-bottom: 1rem;
+}
+
+.country-card-header h3 {
+    color: #81c784;
+    font-size: 1.3rem;
+    margin-bottom: 0.25rem;
+}
+
+.country-card-header p {
+    color: #90caf9;
+    font-size: 0.95rem;
+}
+
+.place-list {
+    list-style: none;
+    display: grid;
+    gap: 0.65rem;
+    margin-bottom: 1rem;
+}
+
+.place-list li {
+    position: relative;
+    padding-left: 1.1rem;
+    color: #e0e0e0;
+}
+
+.place-list li::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    color: #64b5f6;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.country-card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #64b5f6;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.country-card-link::after {
+    content: '→';
+    transition: transform 0.2s ease;
+}
+
+.country-card-link:hover::after {
+    transform: translateX(3px);
+}
+
+.country-card-loading {
+    min-height: 280px;
+}
+
+.place-list-loading {
+    gap: 0.85rem;
+}
+
+.skeleton-line {
+    border-radius: 999px;
+    background: linear-gradient(90deg, #222 25%, #333 50%, #222 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+}
+
+.skeleton-line-title {
+    height: 24px;
+    width: 70%;
+    margin-bottom: 0.4rem;
+}
+
+.skeleton-line-subtitle {
+    height: 16px;
+    width: 45%;
+}
+
+.skeleton-line-item {
+    height: 16px;
+    width: 100%;
+}
+
+.country-empty-state {
+    text-align: center;
+    color: #b0bec5;
+    margin-top: 1.5rem;
+}
+
 /* Destination Sections */
 .destination {
     margin-bottom: 80px;
