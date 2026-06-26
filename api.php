@@ -521,12 +521,36 @@ if ($action === 'country-places') {
         }
 
         if (!empty($missing)) {
+            if (!function_exists('curl_init') || !function_exists('curl_setopt_array')) {
+                foreach ($missing as $value) {
+                    $results[$value] = $value;
+                }
+
+                foreach ($results as $source => $translated) {
+                    $translationCache[$source] = $translated;
+                }
+
+                return $results;
+            }
+
             $query = 'client=gtx&sl=auto&tl=en&dt=t';
             foreach ($missing as $value) {
                 $query .= '&q=' . rawurlencode($value);
             }
 
             $ch = curl_init('https://translate.googleapis.com/translate_a/single?' . $query);
+            if ($ch === false) {
+                foreach ($missing as $value) {
+                    $results[$value] = $value;
+                }
+
+                foreach ($results as $source => $translated) {
+                    $translationCache[$source] = $translated;
+                }
+
+                return $results;
+            }
+
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => true,
@@ -574,7 +598,7 @@ if ($action === 'country-places') {
         }
 
         $normalized = strtoupper($value);
-        if (preg_match('/^[A-Z]{2}$/', $normalized)) {
+        if (preg_match('/^[A-Z]{2}$/', $normalized) && class_exists('Locale')) {
             $fullName = Locale::getDisplayRegion('und-' . $normalized, 'en');
             if (is_string($fullName) && $fullName !== '' && $fullName !== $normalized) {
                 return $normalizePlaceText($fullName) ?? $fullName;
@@ -596,8 +620,8 @@ if ($action === 'country-places') {
             return $place;
         }
 
-        $placeLower = mb_strtolower($place);
-        $countryLower = mb_strtolower($countryName);
+        $placeLower = function_exists('mb_strtolower') ? mb_strtolower($place) : strtolower($place);
+        $countryLower = function_exists('mb_strtolower') ? mb_strtolower($countryName) : strtolower($countryName);
 
         $suffixes = [
             ', ' . $countryLower,
