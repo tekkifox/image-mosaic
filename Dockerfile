@@ -22,12 +22,14 @@ FROM php:8.4-fpm-alpine
 # Install required PHP extensions and tools
 RUN apk add --no-cache \
     curl \
+    curl-dev \
     git \
     supervisor \
     nginx \
     gettext \
     && docker-php-ext-install -j$(nproc) \
         curl \
+    && apk del --no-cache curl-dev \
     && rm -rf /var/cache/apk/*
 
 # Set working directory
