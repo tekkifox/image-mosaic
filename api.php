@@ -94,46 +94,7 @@ if ($action === 'tiles') {
         ], $debugMode);
     }
 
-    // SPEED OPTIMIZATION: Skip expensive operations on initial request
-    // Return PhotoPrism URLs directly, cache asynchronously
-    $cache = new CacheManager('public/cache');
-    $cachedThumbs = [];
-    $thumbnailUrls = [];
-    
-    // FAST PATH: Check cache but don't wait for it
-    // For initial load, just get PhotoPrism URLs immediately
-    foreach ($photos as $photo) {
-        $hash = $client->getPhotoHash($photo);
-        if ($hash) {
-            // Quick check: is it cached?
-            $cached = $cache->getThumbnailPath($hash);
-            if ($cached) {
-                $cachedThumbs[$hash] = $cached;
-            } else {
-                // Get PhotoPrism URL (instant, no fetching yet)
-                $thumbUrl = $client->getThumbnailUrl($photo, 200);
-                if ($thumbUrl) {
-                    $thumbnailUrls[$hash] = $thumbUrl;
-                }
-            }
-        }
-    }
-    
-    // ASYNC BACKGROUND CACHING: Don't block response
-    // Spawn background process to cache thumbnails and generate base64
-    // This makes first request fast (~2 seconds instead of 25)
-    if (!empty($thumbnailUrls) && $limit <= 36) {
-        // Only cache for initial small request, not for subsequent large requests
-        $cacheScript = __DIR__ . '/scripts/async-cache-and-encode.php';
-        if (file_exists($cacheScript)) {
-            $data = json_encode(['urls' => $thumbnailUrls, 'limit' => count($thumbnailUrls)]);
-            @file_put_contents('/tmp/cache_jobs.json', $data . "\n", FILE_APPEND);
-        }
-    }
-    
-    // IMMEDIATE RESPONSE: Return PhotoPrism URLs (fast!)
-    // No base64, no caching wait, no slow operations
-    $dataUrisByHash = $thumbnailUrls;
+    // Thumbnail caching has been removed; rely on live PhotoPrism URLs directly.
 
     // Determine which photos include embedded album data and which need detail fetch
     $tiles = [];
@@ -250,28 +211,6 @@ if ($action === 'tiles') {
     $urlMapper->loadMappings();
 
     foreach ($photos as $photo) {
-        $hash = $client->getPhotoHash($photo);
-        $thumb = null;
-
-         // Priority order for thumbnail:
-         // 1. Cached thumbnail URL (fastest!)
-         // 2. Base64 data URI (already generated)
-         // 3. PhotoPrism URL (fallback)
-         if ($hash !== null && isset($cachedThumbs[$hash])) {
-             // Use cached file URL - instant, no base64 encoding
-             $thumb = $cachedThumbs[$hash];
-         } elseif ($hash !== null && isset($dataUrisByHash[$hash])) {
-             // Use generated base64
-             $thumb = $dataUrisByHash[$hash];
-         } else {
-             // Fallback to PhotoPrism URL
-             $thumb = $client->getThumbnailUrl($photo);
-         }
-
-         if ($thumb === null) {
-             $responseDebug['skipped_photos'] = ($responseDebug['skipped_photos'] ?? 0) + 1;
-             continue;
-         }
 
         // Prefer embedded album objects when available
         $albumTitles = [];
@@ -361,18 +300,24 @@ if ($action === 'tiles') {
         }
 
         // Get image URLs for different sizes
-        $fullImageUrl = $client->getThumbnailUrl($photo, 2000) ?? $client->getThumbnailUrl($photo, 500) ?? $thumb;
+        $fullImageUrl = $client->getThumbnailUrl($photo, 2000) ?? $client->getThumbnailUrl($photo, 500) ?? $client->getThumbnailUrl($photo, 224);
         $mediumImageUrl = $client->getThumbnailUrl($photo, 500) ?? $fullImageUrl;
         $thumbnailImageUrl = $client->getThumbnailUrl($photo, 224) ?? $mediumImageUrl;
+        $thumbUrl = $thumbnailImageUrl ?? $mediumImageUrl ?? $fullImageUrl;
+
+        if ($thumbUrl === null) {
+            $responseDebug['skipped_photos'] = ($responseDebug['skipped_photos'] ?? 0) + 1;
+            continue;
+        }
 
         // Map URLs to hashes for privacy
-        $fullImageHash = $urlMapper->mapUrl($fullImageUrl);
-        $mediumImageHash = $urlMapper->mapUrl($mediumImageUrl);
+        $fullImageHash = $fullImageUrl ? $urlMapper->mapUrl($fullImageUrl) : null;
+        $mediumImageHash = $mediumImageUrl ? $urlMapper->mapUrl($mediumImageUrl) : null;
 
         $tiles[] = [
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
             'albums' => $albumTitles,
-            'thumbUrl' => $thumbnailImageUrl,
+            'thumbUrl' => $thumbUrl,
             //'mediumUrl' => $mediumImageUrl,
             //'fullUrl' => $fullImageUrl,
             'imageHash' => $fullImageHash,
@@ -386,14 +331,15 @@ if ($action === 'tiles') {
         $tiles[] = [
             'title' => 'Empty slot',
             'albums' => [],
-            'thumb' => 'data:image/svg+xml;charset=UTF-8,' . rawurlencode(
+            'thumbUrl' => 'data:image/svg+xml;charset=UTF-8,' . rawurlencode(
                 '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">' .
                 '<rect width="100%" height="100%" fill="#333"/>' .
                 '<text x="50%" y="50%" fill="#aaa" font-family="Arial,Helvetica,sans-serif" ' .
                 'font-size="20" text-anchor="middle" dominant-baseline="middle">No image</text>' .
                 '</svg>'
             ),
-            'full' => '#',
+            'imageHash' => '',
+            'mediumHash' => '',
             'taken' => '',
             'caption' => '',
         ];

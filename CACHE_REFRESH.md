@@ -232,15 +232,11 @@ chmod 644 /path/to/app/public/cache/.*
 The cache shouldn't grow much since:
 - Tiles cache: Single file (~100KB) per category
 - Count cache: Single file (~100 bytes) per category
-- Thumbnails: Only cached if accessed
 
 Monitor size:
 
 ```bash
 du -sh /path/to/app/public/cache/
-
-# If too large, delete thumbnail cache:
-rm -f /path/to/app/public/cache/*.{jpg,png,webp}
 ```
 
 ### Photos Not Updating
@@ -264,13 +260,10 @@ Photos should now be fresh from PhotoPrism.
 ## Cache Directory Structure
 
 ```
-public/cache/
-├── .tiles_abc123_processed.json     # Main tiles cache
-├── .count_abc123.json               # Photo count cache
-├── .url_mapping.json                # Image URL mapping
-├── image1.jpg                       # Downloaded thumbnail
-├── image2.jpg
-└── ...
+ public/cache/
+ ├── .tiles_abc123_processed.json     # Main tiles cache
+ ├── .count_abc123.json               # Photo count cache
+ └── .url_mapping.json                # Image URL mapping
 ```
 
 Files starting with `.` are cache metadata. Other files are thumbnail images.
