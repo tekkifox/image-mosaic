@@ -26,30 +26,27 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
     if (index < 0 || index >= items.length) return;
     
     const it = items[index];
-    // Prefer the full-size hash for prefetch, but fall back to medium if needed
-    const imageHash = it.imageHash || it.mediumHash;
+    const imageUrl = it.full || it.medium || it.src;
     
-    if (!imageHash || prefetchCache[index]) return; // Already prefetching or cached
+    if (!imageUrl || prefetchCache[index]) return; // Already prefetching or cached
     
     // Mark as prefetching to avoid duplicate requests
     setPrefetchCache(prev => ({ ...prev, [index]: 'prefetching' }));
     
-    // Use hash to request image (URL is looked up server-side)
-    const cacheUrl = `/api.php?action=cache&subaction=get&hash=${encodeURIComponent(imageHash)}`;
-    
-    // Silently prefetch in background (no UI updates)
-    // Use low priority to not interfere with user interactions
-    fetch(cacheUrl, { method: 'GET', priority: 'low' })
-      .then(response => response.ok ? response.blob() : null)
-      .then(blob => {
-        if (blob) {
-          const blobUrl = URL.createObjectURL(blob);
-          setPrefetchCache(prev => ({ ...prev, [index]: blobUrl }));
-        }
-      })
-      .catch(() => {
-        // Silently fail, don't block anything
+    const img = new Image();
+    img.decoding = 'async';
+    img.loading = 'eager';
+    img.src = imageUrl;
+    img.onload = () => {
+      setPrefetchCache(prev => ({ ...prev, [index]: imageUrl }));
+    };
+    img.onerror = () => {
+      setPrefetchCache(prev => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
       });
+    };
   };
 
   // Prefetch next and previous images when index changes
@@ -67,75 +64,46 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
     }
   }, [currentIndex, items.length]);
 
-  // Cache image when item changes
+  // Show a small preview first, then swap to the larger direct URL when it loads.
   useEffect(() => {
     if (currentIndex < 0 || currentIndex >= items.length) return;
 
     const it = items[currentIndex];
-    // Use full-size hash for lightbox (imageHash), fallback to medium if not available
-    const fullImageHash = it.imageHash || it.mediumHash;
-    const fallbackUrl = it.full || it.src; // Prefer full-size fallback before thumbnail
+    const previewUrl = it.medium || it.src || it.full;
+    const fullUrl = it.full || previewUrl;
 
-    if (!fullImageHash) {
-      setDisplayImage(fallbackUrl || null);
+    if (!previewUrl) {
+      setDisplayImage(null);
       setIsLoading(false);
       return;
     }
 
-    // Start with thumbnail/medium version if available
-    if (fallbackUrl?.startsWith('data:')) {
-      setDisplayImage(fallbackUrl);
-    }
+    setDisplayImage(previewUrl);
 
-    // Check if already cached (from prefetch or previous view)
-    if (prefetchCache[currentIndex]) {
-      setDisplayImage(prefetchCache[currentIndex]);
+    if (!fullUrl || fullUrl === previewUrl) {
       setIsLoading(false);
       return;
     }
 
-    // Download full-size image from cache
     setIsLoading(true);
-    
-    const cacheUrl = `/api.php?action=cache&subaction=get&hash=${encodeURIComponent(fullImageHash)}`;
-    
-    fetch(cacheUrl, { 
-      method: 'GET',
-      headers: {
-        'Accept': 'image/*'
-      }
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        
-        return response.blob();
-      })
-      .then(blob => {
-        if (!blob || blob.size === 0) {
-          throw new Error('Empty response blob');
-        }
-        
-        // Create blob URL for the full-size image
-        const blobUrl = URL.createObjectURL(blob);
-        
-        // Store in cache for fast retrieval
-        setPrefetchCache(prev => ({ ...prev, [currentIndex]: blobUrl }));
-        
-        // Display the full-size image
-        setDisplayImage(blobUrl);
-        setIsLoading(false);
-      })
-      .catch(error => {
-        // Fallback to thumbnail if full-size fails
-        setDisplayImage(fallbackUrl);
-        setIsLoading(false);
-      });
-    
-    // Cleanup blob URL on unmount or change
+    let cancelled = false;
+
+    const largeImage = new Image();
+    largeImage.decoding = 'async';
+    largeImage.onload = () => {
+      if (cancelled) return;
+      setDisplayImage(fullUrl);
+      setIsLoading(false);
+    };
+    largeImage.onerror = () => {
+      if (cancelled) return;
+      setIsLoading(false);
+    };
+    largeImage.src = fullUrl;
+
+    // Direct image URLs are browser-cached; no manual cleanup needed.
     return () => {
-      // Will cleanup old blob URLs as new ones are created
+      cancelled = true;
     };
   }, [currentIndex, items]);
 
@@ -205,11 +173,12 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
             </div>
           )}
           
-          {/* Main image - displays from cache with smooth transition */}
+          {/* Main image - browser loads the direct PhotoPrism URL */}
           <img 
             key={`img-${currentIndex}`}
-            src={displayImage || it.full || it.src} 
+            src={displayImage || it.medium || it.src || it.full} 
             alt={it.alt || ''} 
+            onError={() => setIsLoading(false)}
             style={{ 
               opacity: 1,
               maxWidth: '100%',

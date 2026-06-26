@@ -318,8 +318,8 @@ if ($action === 'tiles') {
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
             'albums' => $albumTitles,
             'thumbUrl' => $thumbUrl,
-            //'mediumUrl' => $mediumImageUrl,
-            //'fullUrl' => $fullImageUrl,
+            'mediumUrl' => $mediumImageUrl,
+            'fullUrl' => $fullImageUrl,
             'imageHash' => $fullImageHash,
             'mediumHash' => $mediumImageHash,
             'taken' => $takenFormatted,
@@ -338,6 +338,8 @@ if ($action === 'tiles') {
                 'font-size="20" text-anchor="middle" dominant-baseline="middle">No image</text>' .
                 '</svg>'
             ),
+            'mediumUrl' => '#',
+            'fullUrl' => '#',
             'imageHash' => '',
             'mediumHash' => '',
             'taken' => '',

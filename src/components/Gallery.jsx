@@ -22,7 +22,8 @@ const Gallery = () => {
     const thumbSrc = t.thumbUrl || t.thumb || t.full || '#';
     return {
       src: thumbSrc,
-      full: t.full || t.link || thumbSrc,
+      medium: t.mediumUrl || t.medium || thumbSrc,
+      full: t.fullUrl || t.full || t.link || t.mediumUrl || thumbSrc,
       alt: t.title || '',
       albums: t.albums || [],
       caption: t.caption || '',
