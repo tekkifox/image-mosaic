@@ -51,6 +51,8 @@ if ($action === 'tiles') {
             $cachedTiles = json_decode(file_get_contents($tilesCachePath), true);
             if (is_array($cachedTiles)) {
                 $responseDebug['cache'] = 'hit_tiles';
+                // Shuffle the cached tiles so each request sees new order
+                shuffle($cachedTiles);
                 // Paginate the cached tiles and return
                 $paginatedTiles = array_slice($cachedTiles, $requestOffset, $returnLimit);
                 respondJson([
@@ -244,9 +246,12 @@ if ($action === 'tiles') {
     $responseDebug['missing_album_count'] = count($missingAlbumIds);
     $responseDebug['fetched_details_count'] = is_array($fetchedDetails) ? count($fetchedDetails) : 0;
 
-     foreach ($photos as $photo) {
-         $hash = $client->getPhotoHash($photo);
-         $thumb = null;
+    $urlMapper = new ImageUrlMapper();
+    $urlMapper->loadMappings();
+
+    foreach ($photos as $photo) {
+        $hash = $client->getPhotoHash($photo);
+        $thumb = null;
 
          // Priority order for thumbnail:
          // 1. Cached thumbnail URL (fastest!)
@@ -355,33 +360,25 @@ if ($action === 'tiles') {
             $caption = $extractCaption($fetchedDetails[$idForDetails]);
         }
 
-        // Get image URLs for different sizes (all hidden behind hashes for privacy)
+        // Get image URLs for different sizes
         $fullImageUrl = $client->getThumbnailUrl($photo, 2000) ?? $client->getThumbnailUrl($photo, 500) ?? $thumb;
         $mediumImageUrl = $client->getThumbnailUrl($photo, 500) ?? $fullImageUrl;
-        $thumbnailImageUrl = $client->getThumbnailUrl($photo, 224) ?? $mediumImageUrl; // For gallery thumbs
-        
-        // Map URLs to hashes for privacy (hide all PhotoPrism URLs from frontend)
-        // Frontend will use these hashes to request images, backend will lookup the URLs
-        $urlMapper = new ImageUrlMapper();
-        $urlMapper->loadMappings();
-        
-        // Hash for full-resolution image (for lightbox) - size 2000 gives fit_5120
+        $thumbnailImageUrl = $client->getThumbnailUrl($photo, 224) ?? $mediumImageUrl;
+
+        // Map URLs to hashes for privacy
         $fullImageHash = $urlMapper->mapUrl($fullImageUrl);
-        
-        // Hash for medium-resolution image (for prefetch optimization) - size 500 gives tile_500
         $mediumImageHash = $urlMapper->mapUrl($mediumImageUrl);
-        
-        // Hash for gallery thumbnail (for display in grid) - size 224 gives tile_224
         $thumbnailHash = $urlMapper->mapUrl($thumbnailImageUrl);
-        
-        $urlMapper->persistMappings();
 
         $tiles[] = [
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
             'albums' => $albumTitles,
-            'thumb' => $thumbnailHash,         // ← Hash instead of URL (privacy!)
-            'imageHash' => $fullImageHash,     // ← Full-size hash for lightbox
-            'mediumHash' => $mediumImageHash,  // ← Medium hash for prefetch (faster)
+            'thumb' => $thumbnailHash,
+            'thumbUrl' => $thumbnailImageUrl,
+            'mediumUrl' => $mediumImageUrl,
+            'fullUrl' => $fullImageUrl,
+            'imageHash' => $fullImageHash,
+            'mediumHash' => $mediumImageHash,
             'taken' => $takenFormatted,
             'caption' => $caption ?? '',
         ];
@@ -404,8 +401,11 @@ if ($action === 'tiles') {
         ];
     }
 
+    // Shuffle tiles before caching so subsequent reads get a new order
+    shuffle($tiles);
     // Cache processed tiles for 5 minutes to avoid expensive re-processing
     @mkdir('public/cache', 0755, true);
+    $urlMapper->persistMappings();
     @file_put_contents($tilesCachePath, json_encode($tiles));
 
     // Return paginated results for fast initial load
