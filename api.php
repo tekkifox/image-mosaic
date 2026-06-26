@@ -563,10 +563,39 @@ if ($action === 'cache') {
         
         // Look up actual PhotoPrism URL from hash
         $photoUrl = $urlMapper->getUrlFromHash($imageHash);
+        
+        // If hash not found, force refresh tiles cache and try again
         if (!$photoUrl) {
-            http_response_code(404);
-            respondJson(['error' => 'Image hash not found'], $debugMode);
-            exit;
+            // Hash not found in current mapping - cache may be stale
+            // Force refresh by deleting tiles cache files
+            $cacheDir = 'public/cache';
+            $tilesCachePattern = glob($cacheDir . '/.tiles_*_processed.json');
+            if (is_array($tilesCachePattern) && !empty($tilesCachePattern)) {
+                foreach ($tilesCachePattern as $cacheFile) {
+                    @unlink($cacheFile);
+                }
+                // Reload mappings from fresh cache
+                $urlMapper->clearMappings();
+                $urlMapper->loadMappings();
+                
+                // Try lookup again
+                $photoUrl = $urlMapper->getUrlFromHash($imageHash);
+                
+                if ($photoUrl) {
+                    if ($debugMode) {
+                        $responseDebug['cache_action'] = 'refreshed_tiles_cache';
+                    }
+                } else {
+                    // Still not found after refresh - hash truly doesn't exist
+                    http_response_code(404);
+                    respondJson(['error' => 'Image hash not found after cache refresh'], $debugMode);
+                    exit;
+                }
+            } else {
+                http_response_code(404);
+                respondJson(['error' => 'Image hash not found'], $debugMode);
+                exit;
+            }
         }
 
         try {
@@ -636,10 +665,39 @@ if ($action === 'cache') {
         }
 
         $photoUrl = $urlMapper->getUrlFromHash($imageHash);
+        
+        // If hash not found, force refresh tiles cache and try again
         if (!$photoUrl) {
-            http_response_code(404);
-            respondJson(['error' => 'Image hash not found'], $debugMode);
-            exit;
+            // Hash not found in current mapping - cache may be stale
+            // Force refresh by deleting tiles cache files
+            $cacheDir = 'public/cache';
+            $tilesCachePattern = glob($cacheDir . '/.tiles_*_processed.json');
+            if (is_array($tilesCachePattern) && !empty($tilesCachePattern)) {
+                foreach ($tilesCachePattern as $cacheFile) {
+                    @unlink($cacheFile);
+                }
+                // Reload mappings from fresh cache
+                $urlMapper->clearMappings();
+                $urlMapper->loadMappings();
+                
+                // Try lookup again
+                $photoUrl = $urlMapper->getUrlFromHash($imageHash);
+                
+                if ($photoUrl) {
+                    if ($debugMode) {
+                        $responseDebug['cache_action'] = 'refreshed_tiles_cache';
+                    }
+                } else {
+                    // Still not found after refresh - hash truly doesn't exist
+                    http_response_code(404);
+                    respondJson(['error' => 'Image hash not found after cache refresh'], $debugMode);
+                    exit;
+                }
+            } else {
+                http_response_code(404);
+                respondJson(['error' => 'Image hash not found'], $debugMode);
+                exit;
+            }
         }
 
         $metadata = $cache->getMetadata($photoUrl);
