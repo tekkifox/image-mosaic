@@ -42,9 +42,11 @@ COPY --from=builder /app .
 RUN mkdir -p \
     public/cache \
     /var/log/php \
+    /var/log/supervisor \
     /var/run/php \
-    && chown -R www-data:www-data /app \
-    && chmod -R 755 public/cache
+    && chown -R www-data:www-data /app /var/log/php /var/run/php \
+    && chmod -R 755 public/cache \
+    && chmod -R 755 /var/run/php
 
 # Copy nginx configuration
 COPY docker/nginx.conf /etc/nginx/nginx.conf
