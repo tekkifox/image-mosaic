@@ -415,9 +415,10 @@ if ($action === 'country-places') {
         $responseDebug['connection'] = $client->getConnectionDebug();
     }
 
-    $placesCacheKey = 'country_places_v7_' . md5(($_GET['category'] ?? 'all') . '|' . ($_GET['album'] ?? 'all') . '|' . ($_GET['order'] ?? 'newest'));
+    $placesCacheKey = 'country_places_v9_' . md5(($_GET['category'] ?? 'all') . '|' . ($_GET['album'] ?? 'all') . '|' . ($_GET['order'] ?? 'newest'));
     $placesCachePath = 'public/cache/.' . $placesCacheKey . '.json';
     $placesCacheTTL = 3600;
+    $translationCachePath = 'public/cache/.country_place_translations_v1.json';
 
     if (file_exists($placesCachePath)) {
         $stat = stat($placesCachePath);
@@ -489,15 +490,61 @@ if ($action === 'country-places') {
             return null;
         }
 
-        if (function_exists('transliterator_transliterate')) {
-            $transliterated = transliterator_transliterate('Any-Latin; Latin-ASCII', $value);
-            if (is_string($transliterated) && trim($transliterated) !== '') {
-                $value = $transliterated;
+        $value = preg_replace('/\s+/u', ' ', $value);
+        return trim((string) $value);
+    };
+    $translationCache = [];
+    if (file_exists($translationCachePath)) {
+        $cachedTranslations = json_decode((string) @file_get_contents($translationCachePath), true);
+        if (is_array($cachedTranslations)) {
+            $translationCache = $cachedTranslations;
+        }
+    }
+
+    $translatePlaceTextToEnglish = function (?string $text) use ($normalizePlaceText, &$translationCache): ?string {
+        $value = $normalizePlaceText($text);
+        if ($value === null) {
+            return null;
+        }
+
+        if (isset($translationCache[$value]) && is_string($translationCache[$value])) {
+            return $translationCache[$value];
+        }
+
+        $url = 'https://translate.googleapis.com/translate_a/single?' . http_build_query([
+            'client' => 'gtx',
+            'sl' => 'auto',
+            'tl' => 'en',
+            'dt' => 't',
+            'q' => $value,
+        ]);
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_CONNECTTIMEOUT => 2,
+            CURLOPT_TIMEOUT => 3,
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Accept-Language: en',
+            ],
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response !== false && $httpCode >= 200 && $httpCode < 300) {
+            $decoded = json_decode($response, true);
+            $translated = $decoded[0][0][0] ?? null;
+            if (is_string($translated) && trim($translated) !== '') {
+                $value = trim(preg_replace('/\s+/u', ' ', $translated));
             }
         }
 
-        $value = preg_replace('/\s+/u', ' ', $value);
-        return trim((string) $value);
+        $translationCache[$value] = $value;
+        return $value;
     };
 
     $countryToFullName = function (string $country) use ($normalizePlaceText): string {
@@ -536,7 +583,6 @@ if ($action === 'country-places') {
             ', ' . $countryLower,
             ' - ' . $countryLower,
             ' ' . $countryLower,
-            ", Viet Nam",
         ];
 
         foreach ($suffixes as $suffix) {
@@ -548,10 +594,10 @@ if ($action === 'country-places') {
             }
         }
 
-        return str_replace(", Viet Nam", '', $place);
+        return $place;
     };
 
-    $extractLocation = function (array $photo, ?array $details = null) use ($extractStringValue, $countryToFullName, $normalizePlaceText, $stripCountryFromPlace): ?array {
+    $extractLocation = function (array $photo, ?array $details = null) use ($extractStringValue, $countryToFullName, $normalizePlaceText): ?array {
         $sources = [];
         if (is_array($details)) {
             $sources[] = $details;
@@ -611,8 +657,6 @@ if ($action === 'country-places') {
             if ($country !== null && $country !== '') {
                 $country = $normalizePlaceText($country) ?? $country;
             }
-
-            $label = $stripCountryFromPlace($label, $country);
 
             if ($label !== null && $label !== '' && $country !== null && $country !== '') {
                 return [
@@ -688,10 +732,20 @@ if ($action === 'country-places') {
             return $b['count'] <=> $a['count'];
         });
 
+        $translatedPlaces = [];
+        foreach (array_slice($places, 0, 6) as $place) {
+            $translated = $translatePlaceTextToEnglish($place['name']);
+            $translated = $stripCountryFromPlace($translated, $country['country']);
+            $translatedPlaces[] = [
+                'name' => $translated !== null && $translated !== '' ? $translated : $place['name'],
+                'count' => $place['count'],
+            ];
+        }
+
         $countryList[] = [
             'country' => $country['country'],
             'photoCount' => $country['photoCount'],
-            'places' => array_slice($places, 0, 6),
+            'places' => $translatedPlaces,
         ];
     }
 
@@ -709,6 +763,7 @@ if ($action === 'country-places') {
 
     @mkdir('public/cache', 0755, true);
     @file_put_contents($placesCachePath, json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
+    @file_put_contents($translationCachePath, json_encode($translationCache, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
 
     respondJson($payload, $debugMode);
     exit;
