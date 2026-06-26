@@ -18,16 +18,19 @@ const Gallery = () => {
 
   const ITEMS_PER_PAGE = 18;
 
-  const mapTile = (t) => ({
-    src: `/api.php?action=cache&subaction=get&hash=${t.thumb}`, // Use cache API for privacy (absolute path)
-    full: t.full || t.link || t.thumb,
-    alt: t.title || '',
-    albums: t.albums || [],
-    caption: t.caption || '',
-    taken: t.taken || '',
-    imageHash: t.imageHash,
-    mediumHash: t.mediumHash,
-  });
+  const mapTile = (t) => {
+    const thumbSrc = t.thumbUrl || t.thumb || t.full || '#';
+    return {
+      src: thumbSrc,
+      full: t.full || t.link || thumbSrc,
+      alt: t.title || '',
+      albums: t.albums || [],
+      caption: t.caption || '',
+      taken: t.taken || '',
+      imageHash: t.imageHash,
+      mediumHash: t.mediumHash,
+    };
+  };
 
   // Load initial batch of photos and fetch total count
   useEffect(() => {
@@ -45,7 +48,6 @@ const Gallery = () => {
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
-        console.error('Failed to fetch photo count:', err);
       });
 
     // Fetch initial 20 tiles
@@ -61,12 +63,10 @@ const Gallery = () => {
           setItems(mapped);
           setCurrentOffset(ITEMS_PER_PAGE);
           setLoading(false);
-          console.log(`✓ Loaded initial ${data.tiles.length} tiles, total: ${data.total}`);
         }
       })
       .catch((err) => {
         if (err.name === 'AbortError') return;
-        console.error('Failed to fetch initial tiles:', err);
         setLoading(false);
       });
 
@@ -79,12 +79,10 @@ const Gallery = () => {
   // Load more photos when user scrolls near end
   const loadMorePhotos = () => {
     if (isLoadingMore || !hasMore) {
-      console.log('Already loading or no more photos');
       return;
     }
 
     setIsLoadingMore(true);
-    console.log(`→ Loading more tiles from offset ${currentOffset}...`);
 
     fetch(`api.php?action=tiles&category=Travelling&limit=${ITEMS_PER_PAGE}&offset=${currentOffset}`)
       .then((r) => r.json())
@@ -95,13 +93,12 @@ const Gallery = () => {
           const newOffset = currentOffset + data.tiles.length;
           setCurrentOffset(newOffset);
           setHasMore(newOffset < (data.total || totalPhotos));
-          console.log(`✓ Loaded ${data.tiles.length} more tiles, total loaded: ${newOffset}`);
         } else {
           setHasMore(false);
         }
       })
       .catch((err) => {
-        console.error('Failed to load more tiles:', err);
+        if (err.name === 'AbortError') return;
       })
       .finally(() => {
         setIsLoadingMore(false);
@@ -131,7 +128,6 @@ const Gallery = () => {
       const countElement = document.querySelector('#photo-count-stat');
       if (countElement) {
         countElement.textContent = photoCount.toLocaleString();
-        console.log('✓ Updated photo count to:', photoCount.toLocaleString());
       }
     }
   }, [photoCount]);

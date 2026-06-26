@@ -108,16 +108,19 @@
 
         if(!mounted) return;
          if(data && Array.isArray(data.tiles)){
-           setColumns(data.columns || 12);
-           const mapped = data.tiles.map(t => ({
-             src: t.thumb,
-             full: t.full || t.link || t.thumb,
-             alt: t.title || '',
-             albums: t.albums || [],
-             caption: t.caption || '',
-             taken: t.taken || ''
-           }));
-           setItems(mapped);
+          setColumns(data.columns || 12);
+          const mapped = data.tiles.map(t => {
+            const thumbSrc = t.thumbUrl || t.thumb || t.full || '#';
+            return {
+              src: thumbSrc,
+              full: t.full || t.link || thumbSrc,
+              alt: t.title || '',
+              albums: t.albums || [],
+              caption: t.caption || '',
+              taken: t.taken || ''
+            };
+          });
+          setItems(mapped);
          }
        }).catch(err=>{
          if(err.name==='AbortError') return;

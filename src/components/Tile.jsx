@@ -36,7 +36,6 @@ const Tile = ({ item, isLoading, onTileClick, onInfoClick }) => {
           pointerEvents: 'none'
         }}
         onLoad={() => {
-          console.log('✓ Image loaded:', item.src);
           setImageLoaded(true);
         }}
         onError={() => {

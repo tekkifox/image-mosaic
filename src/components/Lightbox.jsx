@@ -77,7 +77,6 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
     const fallbackUrl = it.src; // Fallback to thumbnail if caching fails
 
     if (!fullImageHash) {
-      console.log('[Lightbox] No image hash available, using fallback');
       setDisplayImage(fallbackUrl || null);
       setIsLoading(false);
       return;
@@ -85,24 +84,20 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
 
     // Start with thumbnail/medium version if available
     if (fallbackUrl?.startsWith('data:')) {
-      console.log('[Lightbox] Displaying thumbnail/preview');
       setDisplayImage(fallbackUrl);
     }
 
     // Check if already cached (from prefetch or previous view)
     if (prefetchCache[currentIndex]) {
-      console.log('[Lightbox] Image served from prefetch cache:', fullImageHash);
       setDisplayImage(prefetchCache[currentIndex]);
       setIsLoading(false);
       return;
     }
 
     // Download full-size image from cache
-    console.log('[Lightbox] Starting fetch for hash:', fullImageHash);
     setIsLoading(true);
     
     const cacheUrl = `/api.php?action=cache&subaction=get&hash=${encodeURIComponent(fullImageHash)}`;
-    console.log('[Lightbox] Fetch URL:', cacheUrl);
     
     fetch(cacheUrl, { 
       method: 'GET',
@@ -111,15 +106,6 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
       }
     })
       .then(response => {
-        console.log('[Lightbox] Response received:', {
-          status: response.status,
-          statusText: response.statusText,
-          contentType: response.headers.get('content-type'),
-          contentLength: response.headers.get('content-length'),
-          contentEncoding: response.headers.get('content-encoding'),
-          cacheStatus: response.headers.get('x-cache-status')
-        });
-        
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -127,19 +113,12 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
         return response.blob();
       })
       .then(blob => {
-        console.log('[Lightbox] Blob received:', {
-          size: blob.size,
-          type: blob.type,
-          sizeKB: Math.round(blob.size / 1024)
-        });
-        
         if (!blob || blob.size === 0) {
           throw new Error('Empty response blob');
         }
         
         // Create blob URL for the full-size image
         const blobUrl = URL.createObjectURL(blob);
-        console.log('[Lightbox] Blob URL created:', blobUrl);
         
         // Store in cache for fast retrieval
         setPrefetchCache(prev => ({ ...prev, [currentIndex]: blobUrl }));
@@ -147,16 +126,9 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
         // Display the full-size image
         setDisplayImage(blobUrl);
         setIsLoading(false);
-        
-        console.log('[Lightbox] Image display state updated with blob URL');
       })
       .catch(error => {
         // Fallback to thumbnail if full-size fails
-        console.error('[Lightbox] FETCH ERROR:', {
-          hash: fullImageHash,
-          error: error.message,
-          errorType: error.constructor.name
-        });
         setDisplayImage(fallbackUrl);
         setIsLoading(false);
       });
@@ -248,14 +220,6 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
               transition: 'opacity 0.3s ease-in-out',
               width: '100%',
               height: '100%',
-            }}
-            onLoad={(e) => {
-              // Log when image finishes loading
-              const size = e.target.naturalWidth ? `${e.target.naturalWidth}x${e.target.naturalHeight}` : 'unknown';
-              console.log('[Lightbox] Image rendered:', { size, isFullSize: !isLoading });
-            }}
-            onError={(e) => {
-              console.error('[Lightbox] Image failed to render:', e.target.src);
             }}
           />
         </div>
