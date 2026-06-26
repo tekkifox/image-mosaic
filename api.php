@@ -373,7 +373,6 @@ if ($action === 'tiles') {
         $tiles[] = [
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
             'albums' => $albumTitles,
-            'thumb' => $thumbnailHash,
             'thumbUrl' => $thumbnailImageUrl,
             //'mediumUrl' => $mediumImageUrl,
             //'fullUrl' => $fullImageUrl,
