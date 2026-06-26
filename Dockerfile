@@ -56,6 +56,10 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Copy PHP configuration
 COPY docker/php.ini /usr/local/etc/php/conf.d/99-custom.ini
 
+# Copy entrypoint script
+COPY docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Create .env file placeholder if it doesn't exist
 RUN [ ! -f .env ] && echo "PHOTO_PRISM_BASE_URL=https://photoprism.example.com" > .env || true
 
@@ -66,5 +70,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Expose port
 EXPOSE 8080
 
-# Run supervisor to manage PHP-FPM and Nginx
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Run entrypoint script which clears cache and starts supervisor
+ENTRYPOINT ["/app/entrypoint.sh"]
