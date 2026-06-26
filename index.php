@@ -214,20 +214,6 @@
         <p>9 months, 8 countries, countless memories</p>
     </footer>
 
-    <!-- Fetch live photo count for stats -->
-    <script>
-        // Stats calculation for hero section
-        const totalPhotos = 4873;
-        const startYear = 2016;
-        const endYear = 2016;
-        const visitedCountries = 5;
-
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelector('#total-photos').textContent = totalPhotos.toLocaleString();
-            document.querySelector('#visited-countries').textContent = visitedCountries;
-            document.querySelector('#travel-period').textContent = `${startYear}${startYear !== endYear ? '–' + endYear : ''}`;
-        });
-    </script>
     <!-- React Gallery Bundle (compiled with webpack) -->
     <script src="/dist/gallery.min.js"></script>
 </body>
