@@ -501,50 +501,70 @@ if ($action === 'country-places') {
         }
     }
 
-    $translatePlaceTextToEnglish = function (?string $text) use ($normalizePlaceText, &$translationCache): ?string {
-        $value = $normalizePlaceText($text);
-        if ($value === null) {
-            return null;
-        }
-
-        if (isset($translationCache[$value]) && is_string($translationCache[$value])) {
-            return $translationCache[$value];
-        }
-
-        $url = 'https://translate.googleapis.com/translate_a/single?' . http_build_query([
-            'client' => 'gtx',
-            'sl' => 'auto',
-            'tl' => 'en',
-            'dt' => 't',
-            'q' => $value,
-        ]);
-
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_CONNECTTIMEOUT => 2,
-            CURLOPT_TIMEOUT => 3,
-            CURLOPT_HTTPHEADER => [
-                'Accept: application/json',
-                'Accept-Language: en',
-            ],
-        ]);
-
-        $response = curl_exec($ch);
-        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($response !== false && $httpCode >= 200 && $httpCode < 300) {
-            $decoded = json_decode($response, true);
-            $translated = $decoded[0][0][0] ?? null;
-            if (is_string($translated) && trim($translated) !== '') {
-                $value = trim(preg_replace('/\s+/u', ' ', $translated));
+    $translatePlaceTextsToEnglish = function (array $texts) use ($normalizePlaceText, &$translationCache): array {
+        $normalized = [];
+        foreach ($texts as $text) {
+            $value = $normalizePlaceText($text);
+            if ($value !== null && $value !== '') {
+                $normalized[$value] = true;
             }
         }
 
-        $translationCache[$value] = $value;
-        return $value;
+        $results = [];
+        $missing = [];
+        foreach (array_keys($normalized) as $value) {
+            if (isset($translationCache[$value]) && is_string($translationCache[$value])) {
+                $results[$value] = $translationCache[$value];
+            } else {
+                $missing[] = $value;
+            }
+        }
+
+        if (!empty($missing)) {
+            $query = 'client=gtx&sl=auto&tl=en&dt=t';
+            foreach ($missing as $value) {
+                $query .= '&q=' . rawurlencode($value);
+            }
+
+            $ch = curl_init('https://translate.googleapis.com/translate_a/single?' . $query);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_TIMEOUT => 4,
+                CURLOPT_HTTPHEADER => [
+                    'Accept: application/json',
+                    'Accept-Language: en',
+                ],
+            ]);
+
+            $response = curl_exec($ch);
+            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($response !== false && $httpCode >= 200 && $httpCode < 300) {
+                $decoded = json_decode($response, true);
+                $translations = is_array($decoded[0] ?? null) ? $decoded[0] : [];
+                foreach ($missing as $index => $value) {
+                    $translated = $translations[$index][0][0] ?? null;
+                    if (is_string($translated) && trim($translated) !== '') {
+                        $results[$value] = trim(preg_replace('/\s+/u', ' ', $translated));
+                    } else {
+                        $results[$value] = $value;
+                    }
+                }
+            } else {
+                foreach ($missing as $value) {
+                    $results[$value] = $value;
+                }
+            }
+        }
+
+        foreach ($results as $source => $translated) {
+            $translationCache[$source] = $translated;
+        }
+
+        return $results;
     };
 
     $countryToFullName = function (string $country) use ($normalizePlaceText): string {
@@ -654,10 +674,6 @@ if ($action === 'country-places') {
                 $country = $countryToFullName($country);
             }
 
-            if ($country !== null && $country !== '') {
-                $country = $normalizePlaceText($country) ?? $country;
-            }
-
             if ($label !== null && $label !== '' && $country !== null && $country !== '') {
                 return [
                     'country' => trim($country),
@@ -723,6 +739,7 @@ if ($action === 'country-places') {
     }
 
     $countryList = [];
+    $placeTranslationsInput = [];
     foreach ($countries as $country) {
         $places = array_values($country['places']);
         usort($places, static function (array $a, array $b): int {
@@ -732,22 +749,29 @@ if ($action === 'country-places') {
             return $b['count'] <=> $a['count'];
         });
 
-        $translatedPlaces = [];
-        foreach (array_slice($places, 0, 6) as $place) {
-            $translated = $translatePlaceTextToEnglish($place['name']);
-            $translated = $stripCountryFromPlace($translated, $country['country']);
-            $translatedPlaces[] = [
-                'name' => $translated !== null && $translated !== '' ? $translated : $place['name'],
-                'count' => $place['count'],
-            ];
+        $topPlaces = array_slice($places, 0, 6);
+        foreach ($topPlaces as $place) {
+            $placeTranslationsInput[] = $place['name'];
         }
 
         $countryList[] = [
             'country' => $country['country'],
             'photoCount' => $country['photoCount'],
-            'places' => $translatedPlaces,
+            'places' => $topPlaces,
         ];
     }
+
+    $placeTranslations = $translatePlaceTextsToEnglish($placeTranslationsInput);
+
+    foreach ($countryList as &$countryEntry) {
+        foreach ($countryEntry['places'] as &$placeEntry) {
+            $translated = $placeTranslations[$placeEntry['name']] ?? $placeEntry['name'];
+            $translated = $stripCountryFromPlace($translated, $countryEntry['country']);
+            $placeEntry['name'] = $translated !== null && $translated !== '' ? $translated : $placeEntry['name'];
+        }
+        unset($placeEntry);
+    }
+    unset($countryEntry);
 
     usort($countryList, static function (array $a, array $b): int {
         if ($a['photoCount'] === $b['photoCount']) {
