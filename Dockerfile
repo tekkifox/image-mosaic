@@ -23,12 +23,14 @@ FROM php:8.4-fpm-alpine
 RUN apk add --no-cache \
     curl \
     curl-dev \
+    icu-dev \
     git \
     supervisor \
     nginx \
     gettext \
     && docker-php-ext-install -j$(nproc) \
         curl \
+        intl \
     && apk del --no-cache curl-dev \
     && rm -rf /var/cache/apk/*
 
