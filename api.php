@@ -415,10 +415,10 @@ if ($action === 'country-places') {
         $responseDebug['connection'] = $client->getConnectionDebug();
     }
 
-    $placesCacheKey = 'country_places_v9_' . md5(($_GET['category'] ?? 'all') . '|' . ($_GET['album'] ?? 'all') . '|' . ($_GET['order'] ?? 'newest'));
+    $placesCacheKey = 'country_places_v10_' . md5(($_GET['category'] ?? 'all') . '|' . ($_GET['album'] ?? 'all') . '|' . ($_GET['order'] ?? 'newest'));
     $placesCachePath = 'public/cache/.' . $placesCacheKey . '.json';
     $placesCacheTTL = 3600;
-    $translationCachePath = 'public/cache/.country_place_translations_v1.json';
+    $translationCachePath = 'public/cache/.country_place_translations_v2.json';
 
     if (file_exists($placesCachePath)) {
         $stat = stat($placesCachePath);
@@ -521,7 +521,7 @@ if ($action === 'country-places') {
         }
 
         if (!empty($missing)) {
-            if (!function_exists('curl_init') || !function_exists('curl_setopt_array')) {
+            if (!function_exists('curl_multi_init') || !function_exists('curl_init') || !function_exists('curl_setopt_array')) {
                 foreach ($missing as $value) {
                     $results[$value] = $value;
                 }
@@ -533,55 +533,85 @@ if ($action === 'country-places') {
                 return $results;
             }
 
-            $query = 'client=gtx&sl=auto&tl=en&dt=t';
+            $multiHandle = curl_multi_init();
+            if ($multiHandle === false) {
+                foreach ($missing as $value) {
+                    $results[$value] = $value;
+                }
+
+                foreach ($results as $source => $translated) {
+                    $translationCache[$source] = $translated;
+                }
+
+                return $results;
+            }
+
+            $handles = [];
             foreach ($missing as $value) {
-                $query .= '&q=' . rawurlencode($value);
-            }
+                $url = 'https://translate.googleapis.com/translate_a/single?' . http_build_query([
+                    'client' => 'gtx',
+                    'sl' => 'auto',
+                    'tl' => 'en',
+                    'dt' => 't',
+                    'q' => $value,
+                ]);
 
-            $ch = curl_init('https://translate.googleapis.com/translate_a/single?' . $query);
-            if ($ch === false) {
-                foreach ($missing as $value) {
+                $ch = curl_init($url);
+                if ($ch === false) {
                     $results[$value] = $value;
+                    continue;
                 }
 
-                foreach ($results as $source => $translated) {
-                    $translationCache[$source] = $translated;
-                }
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_CONNECTTIMEOUT => 2,
+                    CURLOPT_TIMEOUT => 4,
+                    CURLOPT_HTTPHEADER => [
+                        'Accept: application/json',
+                        'Accept-Language: en',
+                    ],
+                ]);
 
-                return $results;
+                curl_multi_add_handle($multiHandle, $ch);
+                $handles[(int) $ch] = [
+                    'handle' => $ch,
+                    'source' => $value,
+                ];
             }
 
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_CONNECTTIMEOUT => 2,
-                CURLOPT_TIMEOUT => 4,
-                CURLOPT_HTTPHEADER => [
-                    'Accept: application/json',
-                    'Accept-Language: en',
-                ],
-            ]);
-
-            $response = curl_exec($ch);
-            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($response !== false && $httpCode >= 200 && $httpCode < 300) {
-                $decoded = json_decode($response, true);
-                $translations = is_array($decoded[0] ?? null) ? $decoded[0] : [];
-                foreach ($missing as $index => $value) {
-                    $translated = $translations[$index][0][0] ?? null;
-                    if (is_string($translated) && trim($translated) !== '') {
-                        $results[$value] = trim(preg_replace('/\s+/u', ' ', $translated));
-                    } else {
-                        $results[$value] = $value;
+            $running = null;
+            do {
+                $status = curl_multi_exec($multiHandle, $running);
+                if ($running) {
+                    $select = curl_multi_select($multiHandle, 1.0);
+                    if ($select === -1) {
+                        usleep(10000);
                     }
                 }
-            } else {
-                foreach ($missing as $value) {
-                    $results[$value] = $value;
+            } while ($running && $status === CURLM_OK);
+
+            foreach ($handles as $item) {
+                $ch = $item['handle'];
+                $source = $item['source'];
+                $response = curl_multi_getcontent($ch);
+                $info = curl_getinfo($ch);
+                curl_multi_remove_handle($multiHandle, $ch);
+                curl_close($ch);
+
+                if ($response !== false && (($info['http_code'] ?? 0) >= 200 && ($info['http_code'] ?? 0) < 300)) {
+                    $decoded = json_decode($response, true);
+                    $translated = $decoded[0][0][0] ?? null;
+                    if (is_string($translated) && trim($translated) !== '') {
+                        $results[$source] = trim(preg_replace('/\s+/u', ' ', $translated));
+                        continue;
+                    }
                 }
+
+                $results[$source] = $source;
             }
+
+            curl_multi_close($multiHandle);
         }
 
         foreach ($results as $source => $translated) {
