@@ -26,8 +26,8 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
     if (index < 0 || index >= items.length) return;
     
     const it = items[index];
-    // Use medium hash for prefetch (faster), fallback to full-size
-    const imageHash = it.mediumHash || it.imageHash;
+    // Prefer the full-size hash for prefetch, but fall back to medium if needed
+    const imageHash = it.imageHash || it.mediumHash;
     
     if (!imageHash || prefetchCache[index]) return; // Already prefetching or cached
     
@@ -74,7 +74,7 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
     const it = items[currentIndex];
     // Use full-size hash for lightbox (imageHash), fallback to medium if not available
     const fullImageHash = it.imageHash || it.mediumHash;
-    const fallbackUrl = it.src; // Fallback to thumbnail if caching fails
+    const fallbackUrl = it.full || it.src; // Prefer full-size fallback before thumbnail
 
     if (!fullImageHash) {
       setDisplayImage(fallbackUrl || null);
@@ -208,7 +208,7 @@ const Lightbox = ({ items, currentIndex, onClose, onPrev, onNext }) => {
           {/* Main image - displays from cache with smooth transition */}
           <img 
             key={`img-${currentIndex}`}
-            src={displayImage || it.src} 
+            src={displayImage || it.full || it.src} 
             alt={it.alt || ''} 
             style={{ 
               opacity: 1,

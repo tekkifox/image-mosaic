@@ -368,7 +368,6 @@ if ($action === 'tiles') {
         // Map URLs to hashes for privacy
         $fullImageHash = $urlMapper->mapUrl($fullImageUrl);
         $mediumImageHash = $urlMapper->mapUrl($mediumImageUrl);
-        $thumbnailHash = $urlMapper->mapUrl($thumbnailImageUrl);
 
         $tiles[] = [
             'title' => $photo['Title'] ?? $photo['title'] ?? '',
