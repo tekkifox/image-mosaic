@@ -48,6 +48,8 @@ class PhotoPrismClient
     private string $username;
     private string $password;
     private ?int $tokenExpiresAt = null;
+    private string $cacheDir = 'public/cache';
+    private const CACHE_TTL = 3600; // 1 hour cache for albums
     private ?string $previewToken = null;
     private array $lastRequestDebug = [];
 
@@ -113,13 +115,20 @@ class PhotoPrismClient
         string $category = '',
         string $order = 'random'
     ): array {
+        // Cache key based on search parameters
+        $cacheKey = 'photos_' . md5(json_encode([$limit, $album, $category, $order]));
+        $cached = $this->getCached($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
+
         $params = ['limit' => $limit, 'order' => $order, 'count' => $limit];
 
         $albumUids = [];
         $albumTitles = [];
 
         if (!empty($category)) {
-            $categoryAlbums = $this->getAlbumsByCategory($category, 100); // Fetch up to 100 albums in category
+            $categoryAlbums = $this->getAlbumsByCategory($category, 100);
             foreach ($categoryAlbums as $catAlbum) {
                 if (!empty($catAlbum['UID'])) {
                     $albumUids[] = $catAlbum['UID'];
@@ -136,7 +145,13 @@ class PhotoPrismClient
             }
         }
 
-        return $this->request('/photos', $params);
+        $result = $this->request('/photos', $params);
+        
+        if (is_array($result)) {
+            $this->setCached($cacheKey, $result);
+        }
+
+        return $result;
     }
 
     /**
@@ -214,11 +229,58 @@ class PhotoPrismClient
             return [];
         }
 
+        // Check cache first to avoid expensive PhotoPrism request
+        $cacheKey = 'albums_' . md5($category . $limit);
+        $cached = $this->getCached($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
+
         $params = ['category' => $category, 'count' => $limit, 'order' => 'newest'];
-
         $response = $this->request('/albums', $params);
+        $result = is_array($response) ? $response : [];
 
-        return is_array($response) ? $response : [];
+        // Cache the result for 1 hour
+        $this->setCached($cacheKey, $result);
+
+        return $result;
+    }
+
+    /**
+     * Get cached data if valid
+     */
+    private function getCached(string $key): ?array
+    {
+        if (!is_dir($this->cacheDir)) {
+            return null;
+        }
+
+        $file = $this->cacheDir . '/.api_cache_' . $key . '.json';
+        if (!file_exists($file)) {
+            return null;
+        }
+
+        $stat = stat($file);
+        if ($stat && (time() - $stat['mtime']) > self::CACHE_TTL) {
+            @unlink($file);
+            return null;
+        }
+
+        $data = json_decode(file_get_contents($file), true);
+        return is_array($data) ? $data : null;
+    }
+
+    /**
+     * Set cache data
+     */
+    private function setCached(string $key, array $data, ?int $ttl = null): void
+    {
+        if (!is_dir($this->cacheDir)) {
+            mkdir($this->cacheDir, 0755, true);
+        }
+
+        $file = $this->cacheDir . '/.api_cache_' . $key . '.json';
+        @file_put_contents($file, json_encode($data));
     }
 
     private function getAlbumUidByName(string $albumName): ?string

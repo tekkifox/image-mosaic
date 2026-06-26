@@ -38,6 +38,36 @@ if ($action === 'tiles') {
         $responseDebug['connection'] = $client->getConnectionDebug();
     }
 
+    $tilesCacheKey = 'tiles_' . md5(($_GET['category'] ?? 'all') . '|' . ($_GET['album'] ?? 'all') . '|' . ($_GET['order'] ?? 'newest'));
+    $tilesCachePath = 'public/cache/.' . $tilesCacheKey . '_processed.json';
+    // Short TTL (5 min) for within same session
+    $tilesCacheTTL = 300;
+    
+    // Check for cached PROCESSED tiles (skip all the expensive processing!)
+    $cachedTiles = null;
+    if (file_exists($tilesCachePath)) {
+        $stat = stat($tilesCachePath);
+        if ($stat && (time() - $stat['mtime']) < $tilesCacheTTL) {
+            $cachedTiles = json_decode(file_get_contents($tilesCachePath), true);
+            if (is_array($cachedTiles)) {
+                $responseDebug['cache'] = 'hit_tiles';
+                // Paginate the cached tiles and return
+                $paginatedTiles = array_slice($cachedTiles, $requestOffset, $returnLimit);
+                respondJson([
+                    'columns' => $mosaicColumns,
+                    'rows' => $mosaicRows,
+                    'tiles' => $paginatedTiles,
+                    'total' => count($cachedTiles),
+                    'offset' => $requestOffset,
+                    'limit' => $returnLimit,
+                    'hasMore' => ($requestOffset + $returnLimit) < count($cachedTiles),
+                    'debug_info' => $responseDebug,
+                ], $debugMode);
+                exit;
+            }
+        }
+    }
+
     $photos = [];
     try {
         $photos = $client->listPhotos(
@@ -47,9 +77,11 @@ if ($action === 'tiles') {
             $_GET['order'] ?? 'random'
         );
         $responseDebug['photo_count'] = is_array($photos) ? count($photos) : 0;
+        $responseDebug['cache'] = 'miss';
     } catch (Throwable $e) {
         http_response_code(500);
         respondJson(['error' => $e->getMessage(), 'debug_info' => $responseDebug], $debugMode);
+        exit;
     }
 
     if (!is_array($photos)) {
@@ -154,7 +186,6 @@ if ($action === 'tiles') {
 
     $fetchedDetails = [];
     if (!empty($missingAlbumIds)) {
-        // Fetch missing photo details in parallel to avoid sequential API calls.
         $fetchedDetails = $client->fetchPhotosDetailsParallel($missingAlbumIds);
     }
 
@@ -373,7 +404,11 @@ if ($action === 'tiles') {
         ];
     }
 
-    // OPTIMIZATION: Return paginated results for fast initial load
+    // Cache processed tiles for 5 minutes to avoid expensive re-processing
+    @mkdir('public/cache', 0755, true);
+    @file_put_contents($tilesCachePath, json_encode($tiles));
+
+    // Return paginated results for fast initial load
     // Support offset/limit for lazy-loading remaining tiles
     $paginatedTiles = array_slice($tiles, $requestOffset, $returnLimit);
     $totalTiles = count($tiles);
@@ -436,11 +471,34 @@ if ($action === 'photo-count') {
         $responseDebug['connection'] = $client->getConnectionDebug();
     }
 
+    // Cache photo count to keep response under 2 seconds
+    $countCacheKey = 'count_' . md5(($_GET['category'] ?? 'all') . '|' . ($_GET['album'] ?? 'all'));
+    $countCachePath = 'public/cache/.' . $countCacheKey . '.json';
+    $countCacheTTL = 3600;
+    
+    $cachedCount = null;
+    if (file_exists($countCachePath)) {
+        $stat = stat($countCachePath);
+        if ($stat && (time() - $stat['mtime']) < $countCacheTTL) {
+            $cachedCount = json_decode(file_get_contents($countCachePath), true);
+            $responseDebug['cache'] = 'hit';
+        }
+    }
+
     try {
-        $count = $client->getPhotoCount(
-            $_GET['album'] ?? '',
-            $_GET['category'] ?? ''
-        );
+        if ($cachedCount !== null) {
+            $count = $cachedCount;
+        } else {
+            $count = $client->getPhotoCount(
+                $_GET['album'] ?? '',
+                $_GET['category'] ?? ''
+            );
+            $responseDebug['cache'] = 'miss';
+            
+            @mkdir('public/cache', 0755, true);
+            @file_put_contents($countCachePath, json_encode($count));
+        }
+        
         respondJson([
             'count' => $count,
             'debug_info' => $responseDebug,
