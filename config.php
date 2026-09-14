@@ -19,13 +19,7 @@ if (file_exists($envFile)) {
 
 return [
     'photo_prism_base_url' => getenv('PHOTO_PRISM_BASE_URL') ?: '',
-    'photo_prism_api_key' => getenv('PHOTO_PRISM_API_KEY') ?: '',
     'photo_prism_access_token' => getenv('PHOTO_PRISM_ACCESS_TOKEN') ?: '',
-    'photo_prism_use_basic_auth' => filter_var(getenv('PHOTO_PRISM_USE_BASIC_AUTH') ?: false, FILTER_VALIDATE_BOOLEAN),
-    'photo_prism_oauth_client_id' => getenv('PHOTO_PRISM_OAUTH_CLIENT_ID') ?: '',
-    'photo_prism_oauth_client_secret' => getenv('PHOTO_PRISM_OAUTH_CLIENT_SECRET') ?: '',
-    'photo_prism_username' => getenv('PHOTO_PRISM_USERNAME') ?: '',
-    'photo_prism_password' => getenv('PHOTO_PRISM_PASSWORD') ?: '',
     'mosaic_columns' => 12,
     'mosaic_rows' => 12,
     'mosaic_limit' => 12 * 12,

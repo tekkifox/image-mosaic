@@ -119,7 +119,7 @@ Edit `.env` and add your PhotoPrism configuration:
 
 ```env
 PHOTO_PRISM_BASE_URL=https://your-photoprism.com
-PHOTO_PRISM_API_KEY=your-api-key
+PHOTO_PRISM_ACCESS_TOKEN=your-access-token
 ```
 
 ### 2. Local Development
@@ -180,7 +180,7 @@ docker run -d \
   --restart always \
   -p 8080:8080 \
   -e PHOTO_PRISM_BASE_URL="https://your-photoprism.com" \
-  -e PHOTO_PRISM_API_KEY="your-api-key" \
+  -e PHOTO_PRISM_ACCESS_TOKEN="your-access-token" \
   -v image-mosaic-cache:/app/public/cache \
   -v /etc/letsencrypt:/etc/letsencrypt:ro \
   --memory=1g \
@@ -233,7 +233,7 @@ docker service create \
   --name image-mosaic \
   --publish 8080:8080 \
   --env PHOTO_PRISM_BASE_URL="https://your-photoprism.com" \
-  --env PHOTO_PRISM_API_KEY="your-api-key" \
+  --env PHOTO_PRISM_ACCESS_TOKEN="your-access-token" \
   --mount type=volume,source=mosaic-cache,target=/app/public/cache \
   --limit-memory=1g \
   ghcr.io/your-username/image-mosaic:latest
@@ -272,11 +272,11 @@ spec:
             configMapKeyRef:
               name: image-mosaic-config
               key: photoprism-url
-        - name: PHOTO_PRISM_API_KEY
+        - name: PHOTO_PRISM_ACCESS_TOKEN
           valueFrom:
             secretKeyRef:
               name: image-mosaic-secrets
-              key: api-key
+              key: access-token
         volumeMounts:
         - name: cache
           mountPath: /app/public/cache

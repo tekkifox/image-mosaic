@@ -18,7 +18,7 @@ docker build -t image-mosaic:latest .
 docker run -d \
   -p 8080:8080 \
   -e PHOTO_PRISM_BASE_URL="https://photoprism.example.com" \
-  -e PHOTO_PRISM_API_KEY="your-api-key" \
+  -e PHOTO_PRISM_ACCESS_TOKEN="your-access-token" \
   -v image-mosaic-cache:/app/public/cache \
   --name image-mosaic \
   image-mosaic:latest
@@ -47,22 +47,8 @@ Configure PhotoPrism connection with these environment variables:
 # Required
 PHOTO_PRISM_BASE_URL=https://photoprism.example.com
 
-# Authentication (choose one method)
-
-# Option 1: API Key
-PHOTO_PRISM_API_KEY=your-api-key
-
-# Option 2: Access Token
 PHOTO_PRISM_ACCESS_TOKEN=your-access-token
 
-# Option 3: Basic Auth
-PHOTO_PRISM_USE_BASIC_AUTH=true
-PHOTO_PRISM_USERNAME=your-username
-PHOTO_PRISM_PASSWORD=your-password
-
-# Option 4: OAuth (for user authorization)
-PHOTO_PRISM_OAUTH_CLIENT_ID=your-client-id
-PHOTO_PRISM_OAUTH_CLIENT_SECRET=your-client-secret
 ```
 
 ## Portainer Setup
@@ -81,7 +67,7 @@ PHOTO_PRISM_OAUTH_CLIENT_SECRET=your-client-secret
    - Volume: `image-mosaic-cache` (or create new)
 7. **Environment Variables:**
    - `PHOTO_PRISM_BASE_URL` = `https://photoprism.example.com`
-   - `PHOTO_PRISM_API_KEY` = `your-api-key`
+   - `PHOTO_PRISM_ACCESS_TOKEN` = `your-access-token`
 8. **Deploy Container**
 
 ### Using Docker Compose with Portainer
@@ -99,7 +85,7 @@ services:
       - "8080:8080"
     environment:
       PHOTO_PRISM_BASE_URL: https://photoprism.example.com
-      PHOTO_PRISM_API_KEY: your-api-key
+      PHOTO_PRISM_ACCESS_TOKEN: your-access-token
     volumes:
       - image-mosaic-cache:/app/public/cache
     restart: unless-stopped
@@ -281,7 +267,7 @@ services:
       - "8080:8080"
     environment:
       PHOTO_PRISM_BASE_URL: https://photoprism.example.com
-      PHOTO_PRISM_API_KEY: ${PHOTO_PRISM_API_KEY}
+      PHOTO_PRISM_ACCESS_TOKEN: ${PHOTO_PRISM_ACCESS_TOKEN}
     volumes:
       - cache:/app/public/cache
     restart: always

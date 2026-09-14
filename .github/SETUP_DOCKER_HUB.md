@@ -68,7 +68,7 @@ docker pull ghcr.io/your-username/image-mosaic:latest
 docker run -d \
   -p 8080:8080 \
   -e PHOTO_PRISM_BASE_URL="https://your-photoprism.com" \
-  -e PHOTO_PRISM_API_KEY="your-key" \
+  -e PHOTO_PRISM_ACCESS_TOKEN="your-access-token" \
   ghcr.io/your-username/image-mosaic:latest
 ```
 

@@ -46,7 +46,7 @@ Deploy your GitHub Container Registry image using Portainer UI.
    - Host: `8080` (or your preference)
 5. **Environment variables** → Add:
    - `PHOTO_PRISM_BASE_URL` = `https://your-photoprism.com`
-   - `PHOTO_PRISM_API_KEY` = `your-api-key`
+   - `PHOTO_PRISM_ACCESS_TOKEN` = `your-access-token`
 6. **Volumes** (optional):
    - Container path: `/app/public/cache`
    - Bind: `image-mosaic-cache` (persistent volume)
@@ -71,7 +71,7 @@ services:
       - "8080:8080"
     environment:
       PHOTO_PRISM_BASE_URL: https://your-photoprism.com
-      PHOTO_PRISM_API_KEY: your-api-key
+      PHOTO_PRISM_ACCESS_TOKEN: your-access-token
     volumes:
       - image-mosaic-cache:/app/public/cache
     restart: unless-stopped
@@ -141,17 +141,8 @@ After clicking Deploy:
 
 ## Environment Variables Reference
 
-**Required:**
 - `PHOTO_PRISM_BASE_URL` - Your PhotoPrism URL
-
-**Choose ONE authentication method:**
-- `PHOTO_PRISM_API_KEY` - API key (recommended)
 - `PHOTO_PRISM_ACCESS_TOKEN` - Access token
-- `PHOTO_PRISM_USERNAME` + `PHOTO_PRISM_PASSWORD` - Basic auth
-
-**Optional:**
-- `PHOTO_PRISM_OAUTH_CLIENT_ID` - OAuth client ID
-- `PHOTO_PRISM_OAUTH_CLIENT_SECRET` - OAuth secret
 
 ## Update Image in Portainer
 

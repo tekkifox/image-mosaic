@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace ImageMosaic;
 
-use RuntimeException;
 use InvalidArgumentException;
 use CurlHandle;
 
@@ -13,25 +12,10 @@ class PhotoPrismClient
     // --- API Endpoints and Configuration Keys ---
     private const API_VERSION_PATH = '/api/v1';
     private const PHOTOS_ENDPOINT = '/photos';
-    private const OAUTH_TOKEN_ENDPOINT = '/oauth/token';
-    private const SESSION_ENDPOINT = '/session';
     private const THUMBNAIL_PATH = '/api/v1/t';
 
-    // --- Auth Type Constants ---
-    private const AUTH_TYPE_BASIC = 'basic_auth';
-    private const AUTH_TYPE_ACCESS_TOKEN = 'access_token';
-    private const AUTH_TYPE_API_KEY = 'api_key';
-    private const AUTH_TYPE_OAUTH_PASSWORD = 'oauth_password';
-    private const AUTH_TYPE_NONE = 'none';
-
     private const CONFIG_BASE_URL = 'photo_prism_base_url';
-    private const CONFIG_API_KEY = 'photo_prism_api_key';
     private const CONFIG_ACCESS_TOKEN = 'photo_prism_access_token';
-    private const CONFIG_USE_BASIC_AUTH = 'photo_prism_use_basic_auth';
-    private const CONFIG_OAUTH_CLIENT_ID = 'photo_prism_oauth_client_id';
-    private const CONFIG_OAUTH_CLIENT_SECRET = 'photo_prism_oauth_client_secret';
-    private const CONFIG_USERNAME = 'photo_prism_username';
-    private const CONFIG_PASSWORD = 'photo_prism_password';
 
     // --- Default cURL Options ---
     private const DEFAULT_TIMEOUT = 15;
@@ -40,14 +24,7 @@ class PhotoPrismClient
 
     // --- Class Properties ---
     private string $baseUrl;
-    private string $apiKey;
     private string $accessToken;
-    private bool $useBasicAuth;
-    private string $oauthClientId;
-    private string $oauthClientSecret;
-    private string $username;
-    private string $password;
-    private ?int $tokenExpiresAt = null;
     private string $cacheDir = 'public/cache';
     private const CACHE_TTL = 3600; // 1 hour cache for albums
     private ?string $previewToken = null;
@@ -60,14 +37,8 @@ class PhotoPrismClient
     {
         // Use throw exceptions for missing critical config values instead of assigning empty strings,
         // as this enforces configuration correctness early.
-        $this->baseUrl = rtrim($config['photo_prism_base_url'] ?? '', '/');
-        $this->apiKey = $config['photo_prism_api_key'] ?? '';
-        $this->accessToken = $config['photo_prism_access_token'] ?? '';
-        $this->useBasicAuth = $config['photo_prism_use_basic_auth'] ?? false;
-        $this->oauthClientId = $config['photo_prism_oauth_client_id'] ?? '';
-        $this->oauthClientSecret = $config['photo_prism_oauth_client_secret'] ?? '';
-        $this->username = $config['photo_prism_username'] ?? '';
-        $this->password = $config['photo_prism_password'] ?? '';
+        $this->baseUrl = rtrim($config[self::CONFIG_BASE_URL] ?? '', '/');
+        $this->accessToken = $config[self::CONFIG_ACCESS_TOKEN] ?? '';
 
         if (empty($this->baseUrl)) {
             throw new InvalidArgumentException('Base URL must be configured.');
@@ -78,35 +49,20 @@ class PhotoPrismClient
     {
         return [
             'baseUrl' => $this->baseUrl,
-            'hasApiKey' => $this->apiKey !== '',
             'hasAccessToken' => $this->accessToken !== '',
-            'hasBasicAuth' => $this->useBasicAuth && $this->username !== '' && $this->password !== '',
             'authType' => $this->getAuthType(),
-            'timeout' => 15,
-            'connectTimeout' => 10,
+            'timeout' => self::DEFAULT_TIMEOUT,
+            'connectTimeout' => self::DEFAULT_CONNECT_TIMEOUT,
         ];
     }
 
     private function getAuthType(): string
     {
-        if ($this->useBasicAuth && $this->username !== '' && $this->password !== '') {
-            return self::AUTH_TYPE_BASIC;
-        }
-
-        // Prefer a configured access token over API key, basic auth, or password grant.
         if ($this->accessToken !== '') {
-            return self::AUTH_TYPE_ACCESS_TOKEN;
+            return 'access_token';
         }
 
-        if ($this->apiKey !== '') {
-            return self::AUTH_TYPE_API_KEY;
-        }
-
-        if ($this->username !== '' && $this->password !== '') {
-            return self::AUTH_TYPE_OAUTH_PASSWORD;
-        }
-
-        return self::AUTH_TYPE_NONE;
+        return 'none';
     }
 
     public function listPhotos(
@@ -145,7 +101,7 @@ class PhotoPrismClient
             }
         }
 
-        $result = $this->request('/photos', $params);
+        $result = $this->request(self::PHOTOS_ENDPOINT, $params);
         
         if (is_array($result)) {
             $this->setCached($cacheKey, $result);
@@ -211,7 +167,7 @@ class PhotoPrismClient
 
         // Use the request() method which returns the photo array
         try {
-            $photos = $this->request('/photos', $params);
+            $photos = $this->request(self::PHOTOS_ENDPOINT, $params);
             if (is_array($photos)) {
                 return count($photos);
             }
@@ -299,7 +255,7 @@ class PhotoPrismClient
         $hash = $this->getPhotoHash($photo);
         $previewToken = $this->getPreviewToken();
         if ($hash !== null && $previewToken !== null) {
-            return $this->baseUrl . '/api/v1/t/' . rawurlencode($hash) . '/'
+            return $this->baseUrl . self::THUMBNAIL_PATH . '/' . rawurlencode($hash) . '/'
                 . rawurlencode($previewToken) . '/' . $this->mapPixelSizeToThumbnailName($size);
         }
 
@@ -623,11 +579,7 @@ class PhotoPrismClient
         ?array $body = null,
         bool $skipAuth = false
     ): array {
-        if (!$skipAuth && $this->getAuthType() === self::AUTH_TYPE_OAUTH_PASSWORD) {
-            $this->refreshAccessToken();
-        }
-
-        $url = $this->baseUrl . '/api/v1' . $path;
+        $url = $this->baseUrl . self::API_VERSION_PATH . $path;
         if (!empty($params)) {
             $url .= '?' . http_build_query($params);
         }
@@ -707,131 +659,6 @@ class PhotoPrismClient
         return is_array($data) ? $data : [];
     }
 
-    private function refreshAccessToken(): void
-    {
-
-        if ($this->accessToken !== '' && $this->tokenExpiresAt !== null && time() + 30 < $this->tokenExpiresAt) {
-            return;
-        }
-
-        if ($this->username === '' || $this->password === '') {
-            throw new \RuntimeException('PhotoPrism OAuth password grant requires username and password.');
-        }
-
-        // Try OAuth password grant with client authentication via HTTP Basic Auth
-        try {
-            $response = $this->requestOAuthToken();
-            $token = $this->extractAccessToken($response);
-            if ($token !== null) {
-                $this->accessToken = $token;
-                if (!empty($response['expires_in'])) {
-                    $this->tokenExpiresAt = time() + (int) $response['expires_in'];
-                }
-                return;
-            }
-        } catch (\RuntimeException $e) {
-            // OAuth token endpoint failed; will attempt session login below
-        }
-
-        // Fallback to session login if OAuth fails
-        try {
-            $this->sessionLogin();
-        } catch (\RuntimeException $e) {
-            throw new \RuntimeException(
-                'PhotoPrism authentication failed: OAuth token request and session login both unsuccessful.'
-            );
-        }
-    }
-
-    /**
-     * Request OAuth token from PhotoPrism using password grant with client credentials via HTTP Basic Auth.
-     */
-    private function requestOAuthToken(): array
-    {
-        if ($this->username === '' || $this->password === '') {
-            throw new \RuntimeException('OAuth token request requires username and password.');
-        }
-
-        $url = $this->baseUrl . '/api/v1/oauth/token';
-
-        // Prepare form data for OAuth token endpoint
-        $body = http_build_query([
-            'grant_type' => 'password',
-            'username' => $this->username,
-            'password' => $this->password,
-        ]);
-
-        // Build headers with client authentication via HTTP Basic Auth
-        $headers = [
-            'Accept: application/json',
-            'Content-Type: application/x-www-form-urlencoded',
-        ];
-
-        // Add HTTP Basic Auth header with client credentials if available
-        if ($this->oauthClientId !== '' && $this->oauthClientSecret !== '') {
-            $clientAuth = base64_encode($this->oauthClientId . ':' . $this->oauthClientSecret);
-            $headers[] = 'Authorization: Basic ' . $clientAuth;
-        }
-
-        $ch = $this->initCurl($url, $headers);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-        [$response, $info, $error] = $this->executeCurl($ch);
-
-        if ($response === false) {
-            throw new \RuntimeException('OAuth token request failed: ' . $error);
-        }
-
-        $data = json_decode($response, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new \RuntimeException('OAuth token endpoint returned invalid JSON: ' . json_last_error_msg());
-        }
-
-        if (($info['http_code'] ?? 0) >= 400) {
-            $message = $data['error'] ?? $data['message'] ?? json_encode($data, JSON_UNESCAPED_SLASHES);
-            throw new \RuntimeException(
-                'OAuth token request failed (' . ($info['http_code'] ?? 'unknown') . '): ' . $message
-            );
-        }
-
-        return is_array($data) ? $data : [];
-    }
-
-    /**
-     * Attempt PhotoPrism session login (POST /api/v1/session) using username/password.
-     * If successful, sets `$this->accessToken` from response fields.
-     * Throws \RuntimeException on failure.
-     */
-    private function sessionLogin(): void
-    {
-        if ($this->username === '' || $this->password === '') {
-            throw new \RuntimeException('Session login requires username and password.');
-        }
-
-        $body = [
-            'username' => $this->username,
-            'password' => $this->password,
-        ];
-
-        $response = $this->request('/session', [], 'POST', $body, true);
-
-        $token = $this->extractAccessToken($response);
-        if ($token === null) {
-            // Some PhotoPrism instances may return token in different fields or via cookie;
-            // include full response in error
-            $details = json_encode($response, JSON_UNESCAPED_SLASHES);
-            throw new \RuntimeException(
-                'PhotoPrism session login did not return an access token. Response: ' . $details
-            );
-        }
-
-        $this->accessToken = $token;
-        // Session tokens may not include expires_in; leave tokenExpiresAt null if absent
-        if (!empty($response['expires_in'])) {
-            $this->tokenExpiresAt = time() + (int) $response['expires_in'];
-        }
-    }
-
     public function getLastRequestDebug(): array
     {
         if (!empty($this->lastRequestDebug)) {
@@ -850,27 +677,6 @@ class PhotoPrismClient
         }
 
         return [];
-    }
-
-    private function extractAccessToken(array $response): ?string
-    {
-        if (!empty($response['access_token'])) {
-            return $response['access_token'];
-        }
-
-        if (!empty($response['token'])) {
-            return $response['token'];
-        }
-
-        if (!empty($response['accessToken'])) {
-            return $response['accessToken'];
-        }
-
-        if (!empty($response['id_token'])) {
-            return $response['id_token'];
-        }
-
-        return null;
     }
 
     /**
@@ -900,11 +706,6 @@ class PhotoPrismClient
         if ($this->accessToken !== '') {
             $headers[] = 'Authorization: Bearer ' . $this->accessToken;
             $headers[] = 'X-Auth-Token: ' . $this->accessToken;
-        } elseif ($this->apiKey !== '') {
-            $headers[] = 'X-Api-Key: ' . $this->apiKey;
-        } elseif ($this->getAuthType() === 'basic_auth') {
-            $credentials = base64_encode($this->username . ':' . $this->password);
-            $headers[] = 'Authorization: Basic ' . $credentials;
         }
 
         return $headers;

@@ -79,7 +79,7 @@ services:
       - "8080:8080"
     environment:
       PHOTO_PRISM_BASE_URL: https://your-photoprism.com
-      PHOTO_PRISM_API_KEY: your-key
+      PHOTO_PRISM_ACCESS_TOKEN: your-access-token
     volumes:
       - image-mosaic-cache:/app/public/cache
     restart: unless-stopped
