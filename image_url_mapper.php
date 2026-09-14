@@ -70,27 +70,6 @@ class ImageUrlMapper
     }
 
     /**
-     * Check if hash is mapped
-     * 
-     * @param string $hash Image hash
-     * @return bool True if hash exists in mapping
-     */
-    public function hasHash(string $hash): bool
-    {
-        return isset($this->urlCache[$hash]);
-    }
-
-    /**
-     * Get all mapped hashes
-     * 
-     * @return array Array of hash => url
-     */
-    public function getAllMappings(): array
-    {
-        return $this->urlCache;
-    }
-
-    /**
      * Clear all mappings
      */
     public function clearMappings(): void
@@ -139,13 +118,4 @@ class ImageUrlMapper
         return false;
     }
 
-    /**
-     * Get the number of mapped URLs
-     * 
-     * @return int Number of mappings
-     */
-    public function count(): int
-    {
-        return count($this->urlCache);
-    }
 }

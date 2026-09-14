@@ -20,7 +20,6 @@ class PhotoPrismClient
     // --- Default cURL Options ---
     private const DEFAULT_TIMEOUT = 15;
     private const DEFAULT_CONNECT_TIMEOUT = 10;
-    private const THUMBNAIL_REQUEST_TIMEOUT = 15; // Specific timeout for thumbnail fetches
 
     // --- Class Properties ---
     private string $baseUrl;
@@ -263,20 +262,6 @@ class PhotoPrismClient
     }
 
     /**
-     * Return the photo identifier from various possible key names.
-     */
-    private function getPhotoIdFromArray(array $photo): ?string
-    {
-        $candidates = ['uuid', 'UUID', 'uid', 'UID', 'id', 'ID'];
-        foreach ($candidates as $k) {
-            if (!empty($photo[$k])) {
-                return (string) $photo[$k];
-            }
-        }
-        return null;
-    }
-
-    /**
      * Return the SHA1 file hash used by PhotoPrism's /api/v1/t/:hash/:token/:size endpoint.
      */
     public function getPhotoHash(array $photo): ?string
@@ -348,104 +333,6 @@ class PhotoPrismClient
     }
 
     /**
-     * Fetch the thumbnail binary for a photo and return a data URI.
-     * Returns null on failure.
-     */
-    public function fetchThumbnailDataUri(array $photo, int $size = 200): ?string
-    {
-        $thumbUrl = $this->getThumbnailUrl($photo, $size);
-        if ($thumbUrl === null) {
-            return null;
-        }
-
-        $headers = $this->getThumbnailHeaders();
-
-        $ch = $this->initCurl($thumbUrl, $headers, self::THUMBNAIL_REQUEST_TIMEOUT);
-        [$data, $info, $error] = $this->executeCurl($ch);
-
-        if ($data === false || ($info['http_code'] ?? 0) >= 400) {
-            return null;
-        }
-
-        // PhotoPrism returns a placeholder SVG when the hash/token/size is invalid.
-        if (str_starts_with($data, '<svg') || str_starts_with($data, '<?xml')) {
-            return null;
-        }
-
-        $contentType = $info['content_type'] ?? 'image/jpeg';
-        if (str_contains($contentType, ';')) {
-            $contentType = trim(explode(';', $contentType, 2)[0]);
-        }
-
-        return 'data:' . $contentType . ';base64,' . base64_encode($data);
-    }
-
-
-    /**
-     * Fetch multiple thumbnails in parallel and return them as data URIs.
-     * Returns an array mapping original photo hash to data URI.
-     */
-    public function fetchThumbnailsDataUriParallel(array $photos, int $size = 200): array
-    {
-        $multiHandle = curl_multi_init();
-        $handles = [];
-        $photoHashes = [];
-
-        foreach ($photos as $photo) {
-            $hash = $this->getPhotoHash($photo);
-            if ($hash === null) {
-                continue;
-            }
-
-            $thumbUrl = $this->getThumbnailUrl($photo, $size);
-            if ($thumbUrl === null) {
-                continue;
-            }
-
-            $ch = $this->initCurl($thumbUrl, $this->getThumbnailHeaders(), self::THUMBNAIL_REQUEST_TIMEOUT);
-            // For multi handles we need to disable RETURNTRANSFER at init time; it's already set by initCurl
-            curl_multi_add_handle($multiHandle, $ch);
-
-            $handles[$thumbUrl] = array ($ch, $photo);
-            $photoHashes[$thumbUrl] = $hash;
-        }
-
-        $running = null;
-        do {
-            curl_multi_exec($multiHandle, $running);
-            curl_multi_select($multiHandle);
-        } while ($running > 0);
-
-        $results = [];
-        foreach ($handles as $thumbUrl => $handle) {
-            $ch = $handle[0];
-            $photo = $handle[1];
-            $data = curl_multi_getcontent($ch);
-            $info = curl_getinfo($ch);
-            curl_multi_remove_handle($multiHandle, $ch);
-            curl_close($ch);
-
-            if ($data === false || ($info['http_code'] ?? 0) >= 400) {
-                continue;
-            }
-
-            if (str_starts_with($data, '<svg') || str_starts_with($data, '<?xml')) {
-                continue;
-            }
-
-            $contentType = $info['content_type'] ?? 'image/jpeg';
-            if (str_contains($contentType, ';')) {
-                $contentType = trim(explode(';', $contentType, 2)[0]);
-            }
-            $results[$photoHashes[$thumbUrl]] = 'data:' . $contentType . ';base64,' . base64_encode($data);
-        }
-
-        curl_multi_close($multiHandle);
-
-        return $results;
-    }
-
-    /**
      * Fetch multiple photo details in parallel using curl_multi and return a map of id => details.
      * Missing or failed entries will have null values.
      *
@@ -493,83 +380,6 @@ class PhotoPrismClient
         curl_multi_close($multiHandle);
 
         return $results;
-    }
-
-    /**
-     * Return album titles for a photo. Always returns an array (possibly empty).
-     *
-     * @param array $photo
-     * @return string[]
-     */
-    public function getPhotoAlbums(array $photo): array
-    {
-        // If albums are already embedded in the photo payload, extract titles directly.
-        if (!empty($photo['Albums']) && is_array($photo['Albums'])) {
-            return $this->extractAlbumTitles($photo['Albums']);
-        }
-
-        if (!empty($photo['albums']) && is_array($photo['albums'])) {
-            return $this->extractAlbumTitles($photo['albums']);
-        }
-
-        $photoId = $this->getPhotoIdFromArray($photo);
-        if ($photoId === null) {
-            return [];
-        }
-
-        try {
-            $photoDetails = $this->request('/photos/' . rawurlencode($photoId));
-            if (!empty($photoDetails['Albums']) && is_array($photoDetails['Albums'])) {
-                return $this->extractAlbumTitles($photoDetails['Albums']);
-            }
-        } catch (\RuntimeException $e) {
-            // Return empty list on error to keep calling code simple.
-            return [];
-        }
-
-        return [];
-    }
-
-    /**
-     * Normalize an array of album entries to an array of titles.
-     * Accepts arrays of album objects or string UIDs; falls back to UID when title missing.
-     *
-     * @param array $albums
-     * @return string[]
-     */
-    private function extractAlbumTitles(array $albums): array
-    {
-        $titles = [];
-        foreach ($albums as $a) {
-            if (is_string($a)) {
-                $titles[] = $a;
-                continue;
-            }
-            if (!is_array($a)) {
-                continue;
-            }
-            if (!empty($a['Title'])) {
-                $titles[] = (string) $a['Title'];
-                continue;
-            }
-            if (!empty($a['title'])) {
-                $titles[] = (string) $a['title'];
-                continue;
-            }
-            if (!empty($a['Name'])) {
-                $titles[] = (string) $a['Name'];
-                continue;
-            }
-            if (!empty($a['name'])) {
-                $titles[] = (string) $a['name'];
-                continue;
-            }
-            if (!empty($a['UID'])) {
-                $titles[] = (string) $a['UID'];
-                continue;
-            }
-        }
-        return array_values(array_unique(array_filter($titles, fn($v) => $v !== null && $v !== '')));
     }
 
     private function request(
@@ -677,23 +487,6 @@ class PhotoPrismClient
         }
 
         return [];
-    }
-
-    /**
-     * Build headers for thumbnail requests.
-     */
-    private function getThumbnailHeaders(): array
-    {
-        $headers = $this->buildHeaders(false);
-        $filtered = [];
-        foreach ($headers as $h) {
-            if (stripos($h, 'Accept:') === 0 || stripos($h, 'Content-Type:') === 0) {
-                continue;
-            }
-            $filtered[] = $h;
-        }
-        $filtered[] = 'Accept: image/*';
-        return $filtered;
     }
 
     private function buildHeaders(bool $skipAuth = false): array
