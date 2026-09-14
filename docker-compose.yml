@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: image-mosaic
     ports:
-      - "8080:8080"
+      - "8081:8081"
     environment:
       # PhotoPrism Configuration
       PHOTO_PRISM_BASE_URL: ${PHOTO_PRISM_BASE_URL:-https://photoprism.example.com}
@@ -25,7 +25,7 @@ services:
     restart: unless-stopped
     
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api.php?action=photo-count"]
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api.php?action=photo-count"]
       interval: 30s
       timeout: 10s
       retries: 3
