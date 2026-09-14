@@ -15,10 +15,55 @@ $config = include __DIR__ . '/config.php';
 $client = new PhotoPrismClient($config);
 header('Content-Type: application/json; charset=utf-8');
 
-$action = $_GET['action'] ?? 'tiles';
+$action = $_GET['action'] ?? '';
 $debugMode = filter_var($_GET['debug'] ?? false, FILTER_VALIDATE_BOOLEAN);
 $mosaicColumns = (int) ($config['mosaic_columns'] ?? 12);
 $mosaicRows = (int) ($config['mosaic_rows'] ?? 12);
+$allowedCategories = ['Travelling'];
+
+$isAllowedCategory = static function (string $category) use ($allowedCategories): bool {
+    return in_array($category, $allowedCategories, true);
+};
+
+if ($action === '') {
+    http_response_code(400);
+    respondJson(['error' => 'Action parameter is required.'], $debugMode);
+    exit;
+}
+
+$imageActionsRequireScope = ['tiles', 'photo-count', 'country-places', 'featured-photo'];
+if (in_array($action, $imageActionsRequireScope, true)) {
+    $category = $_GET['category'] ?? '';
+    if ($category === '') {
+        http_response_code(400);
+        respondJson(['error' => 'Category must be one of the allowed categories.'], $debugMode);
+        exit;
+    }
+
+    if (!$isAllowedCategory($category)) {
+        http_response_code(400);
+        respondJson(['error' => 'Only allowed categories are permitted.'], $debugMode);
+        exit;
+    }
+}
+
+if ($action === 'albums_by_category') {
+    $category = $_GET['category'] ?? '';
+    if (!$isAllowedCategory($category)) {
+        http_response_code(400);
+        respondJson(['error' => 'Only allowed categories are permitted.'], $debugMode);
+        exit;
+    }
+}
+
+if ($action === 'featured-photo') {
+    $category = $_GET['category'] ?? '';
+    if ($category !== '' && !$isAllowedCategory($category)) {
+        http_response_code(400);
+        respondJson(['error' => 'Only allowed categories are permitted.'], $debugMode);
+        exit;
+    }
+}
 
 // OPTIMIZATION: Fetch 144 photos but return paginated tiles
 // First request returns 36 tiles (3 rows), rest lazy-loaded on demand
