@@ -45,6 +45,24 @@ class PhotoPrismClient
         if (empty($this->baseUrl)) {
             throw new InvalidArgumentException('Base URL must be configured.');
         }
+
+        // If apiKey wasn't provided via config, attempt to read a local .env file
+        // This helps when docker-compose injects env vars differently and the
+        // config.php load didn't populate the value.
+        if ($this->apiKey === '') {
+            $envFile = __DIR__ . '/.env';
+            if (is_readable($envFile)) {
+                $contents = @file_get_contents($envFile);
+                if ($contents !== false && preg_match('/^PHOTO_PRISM_API_KEY\s*=\s*(.+)$/m', $contents, $m)) {
+                    $val = trim($m[1], " \t\"'\r\n");
+                    if ($val !== '') {
+                        $this->apiKey = $val;
+                        // also export to environment for other consumers
+                        putenv('PHOTO_PRISM_API_KEY=' . $val);
+                    }
+                }
+            }
+        }
     }
 
     public function getConnectionDebug(): array
