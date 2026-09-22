@@ -151,8 +151,38 @@ class PhotoPrismClient
             }
         }
 
+        // If we resolved album UIDs for the category, fetch photos per-album to
+        // guarantee strict category scoping. Aggregate until we have enough
+        // photos or exhaust the available albums.
+        if (!empty($albumUids)) {
+            $collected = [];
+            foreach ($albumUids as $uid) {
+                try {
+                    $photosForAlbum = $this->request(self::PHOTOS_ENDPOINT, ['s' => $uid, 'count' => $limit, 'order' => $order]);
+                    if (is_array($photosForAlbum)) {
+                        foreach ($photosForAlbum as $p) {
+                            $collected[] = $p;
+                            if (count($collected) >= $limit) {
+                                break 2; // enough photos collected
+                            }
+                        }
+                    }
+                } catch (\RuntimeException $e) {
+                    // Skip failing album fetches and continue with remaining albums
+                    continue;
+                }
+            }
+
+            $result = array_slice($collected, 0, $limit);
+            if (is_array($result)) {
+                $this->setCached($cacheKey, $result);
+            }
+            return $result;
+        }
+
+        // Default: perform a single photos request using composed params
         $result = $this->request(self::PHOTOS_ENDPOINT, $params);
-        
+
         if (is_array($result)) {
             $this->setCached($cacheKey, $result);
         }
