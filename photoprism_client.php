@@ -117,7 +117,12 @@ class PhotoPrismClient
                 }
             }
             if (!empty($albumTitles)) {
-                $params['q'] = 'albums:"' . implode('|', $albumTitles) . '"';
+                // Build a query that ORs album title matches. Use the form:
+                // albums:"Title1" OR albums:"Title2"
+                $escaped = array_map(static function ($t) {
+                    return str_replace('"', '\\"', (string) $t);
+                }, $albumTitles);
+                $params['q'] = 'albums:"' . implode('" OR albums:"', $escaped) . '"';
             } else {
                 // Fallback: if no albums were discoverable (permission-restricted or none),
                 // ask the photos endpoint to filter by category directly.
@@ -187,7 +192,10 @@ class PhotoPrismClient
                 }
             }
             if (!empty($albumTitles)) {
-                $params['q'] = 'albums:"' . implode('|', $albumTitles) . '"';
+                $escaped = array_map(static function ($t) {
+                    return str_replace('"', '\\"', (string) $t);
+                }, $albumTitles);
+                $params['q'] = 'albums:"' . implode('" OR albums:"', $escaped) . '"';
             } else {
                 // If no albums could be resolved for the category, fall back to category
                 // filter on the photos endpoint so we still restrict results.
