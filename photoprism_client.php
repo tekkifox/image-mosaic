@@ -249,80 +249,16 @@ class PhotoPrismClient
         if ($cached !== null) {
             return $cached;
         }
-
+        // Primary approach: query the /albums endpoint by category. The API
+        // supports listing albums filtered by category when the token has
+        // sufficient scope (recommended).
         $params = ['category' => $category, 'count' => $limit, 'order' => 'newest'];
+        $response = $this->request('/albums', $params);
+        $result = is_array($response) ? $response : [];
 
-        try {
-            // Try the albums endpoint first (preferred when allowed)
-            $response = $this->request('/albums', $params);
-            $result = is_array($response) ? $response : [];
-        } catch (\RuntimeException $e) {
-            // If permissions prevent access to albums, fall back to scanning photos
-            // and extracting album titles from the returned photo records. This
-            // preserves user-visible album titles even when the albums API is
-            // restricted.
-            if (stripos($e->getMessage(), 'permission') !== false) {
-                $result = [];
-                try {
-                    $photos = $this->request(self::PHOTOS_ENDPOINT, ['category' => $category, 'count' => $limit, 'order' => 'newest']);
-                    if (is_array($photos)) {
-                        $seen = [];
-                        foreach ($photos as $p) {
-                            // Photos may include embedded album objects or simple strings
-                            if (!empty($p['Albums']) && is_array($p['Albums'])) {
-                                foreach ($p['Albums'] as $a) {
-                                    $title = null;
-                                    foreach (['Title', 'title', 'Name', 'name'] as $k) {
-                                        if (!empty($a[$k]) && is_string($a[$k])) {
-                                            $title = (string) $a[$k];
-                                            break;
-                                        }
-                                    }
-                                    $uid = !empty($a['UID']) ? (string) $a['UID'] : (!empty($a['uid']) ? (string) $a['uid'] : '');
-                                    if ($title !== null && $title !== '') {
-                                        $seen[$title] = ['UID' => $uid, 'Title' => $title];
-                                    }
-                                }
-                            } elseif (!empty($p['albums']) && is_array($p['albums'])) {
-                                foreach ($p['albums'] as $a) {
-                                    $title = null;
-                                    if (is_string($a)) {
-                                        $title = $a;
-                                        $uid = '';
-                                    } elseif (is_array($a)) {
-                                        foreach (['Title', 'title', 'Name', 'name'] as $k) {
-                                            if (!empty($a[$k]) && is_string($a[$k])) {
-                                                $title = (string) $a[$k];
-                                                break;
-                                            }
-                                        }
-                                        $uid = !empty($a['UID']) ? (string) $a['UID'] : (!empty($a['uid']) ? (string) $a['uid'] : '');
-                                    } else {
-                                        $uid = '';
-                                    }
-
-                                    if ($title !== null && $title !== '') {
-                                        $seen[$title] = ['UID' => $uid, 'Title' => $title];
-                                    }
-                                }
-                            }
-                        }
-
-                        $result = array_values($seen);
-                    }
-                } catch (\RuntimeException $e2) {
-                    // If the fallback also fails, rethrow the original albums error
-                    throw $e;
-                }
-            } else {
-                throw $e;
-            }
-        }
-
-        // Cache the result for 1 hour
-        $this->setCached($cacheKey, is_array($result) ? $result : []);
-
-        return is_array($result) ? $result : [];
+        // Cache and return
+        $this->setCached($cacheKey, $result);
+        return $result;
     }
 
     /**
