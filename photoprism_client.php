@@ -286,8 +286,15 @@ class PhotoPrismClient
         // supports listing albums filtered by category when the token has
         // sufficient scope (recommended).
         $params = ['category' => $category, 'count' => $limit, 'order' => 'newest'];
-        $response = $this->request('/albums', $params);
-        $result = is_array($response) ? $response : [];
+        try {
+            $response = $this->request('/albums', $params);
+            $result = is_array($response) ? $response : [];
+        } catch (\RuntimeException $e) {
+            // If albums lookup fails (for example due to permission issues),
+            // return an empty list and let callers fall back to photos-based
+            // category filtering.
+            $result = [];
+        }
 
         // Cache and return
         $this->setCached($cacheKey, $result);
