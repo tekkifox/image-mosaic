@@ -16,6 +16,7 @@ class PhotoPrismClient
 
     private const CONFIG_BASE_URL = 'photo_prism_base_url';
     private const CONFIG_ACCESS_TOKEN = 'photo_prism_access_token';
+    private const CONFIG_API_KEY = 'photo_prism_api_key';
 
     // --- Default cURL Options ---
     private const DEFAULT_TIMEOUT = 15;
@@ -24,6 +25,7 @@ class PhotoPrismClient
     // --- Class Properties ---
     private string $baseUrl;
     private string $accessToken;
+    private string $apiKey = '';
     private string $cacheDir = 'public/cache';
     private const CACHE_TTL = 3600; // 1 hour cache for albums
     private ?string $previewToken = null;
@@ -38,6 +40,7 @@ class PhotoPrismClient
         // as this enforces configuration correctness early.
         $this->baseUrl = rtrim($config[self::CONFIG_BASE_URL] ?? '', '/');
         $this->accessToken = $config[self::CONFIG_ACCESS_TOKEN] ?? '';
+        $this->apiKey = $config[self::CONFIG_API_KEY] ?? '';
 
         if (empty($this->baseUrl)) {
             throw new InvalidArgumentException('Base URL must be configured.');
@@ -49,6 +52,7 @@ class PhotoPrismClient
         return [
             'baseUrl' => $this->baseUrl,
             'hasAccessToken' => $this->accessToken !== '',
+            'hasApiKey' => $this->apiKey !== '',
             'authType' => $this->getAuthType(),
             'timeout' => self::DEFAULT_TIMEOUT,
             'connectTimeout' => self::DEFAULT_CONNECT_TIMEOUT,
@@ -59,6 +63,10 @@ class PhotoPrismClient
     {
         if ($this->accessToken !== '') {
             return 'access_token';
+        }
+
+        if ($this->apiKey !== '') {
+            return 'api_key';
         }
 
         return 'none';
@@ -496,9 +504,16 @@ class PhotoPrismClient
             return $headers;
         }
 
+        // Prefer a bearer access token when available. Otherwise, fall back to API key header.
         if ($this->accessToken !== '') {
             $headers[] = 'Authorization: Bearer ' . $this->accessToken;
             $headers[] = 'X-Auth-Token: ' . $this->accessToken;
+            return $headers;
+        }
+
+        if ($this->apiKey !== '') {
+            // PhotoPrism supports X-API-Key style header usage in some deployments.
+            $headers[] = 'X-API-Key: ' . $this->apiKey;
         }
 
         return $headers;

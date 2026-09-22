@@ -20,6 +20,7 @@ if (file_exists($envFile)) {
 return [
     'photo_prism_base_url' => getenv('PHOTO_PRISM_BASE_URL') ?: '',
     'photo_prism_access_token' => getenv('PHOTO_PRISM_ACCESS_TOKEN') ?: '',
+    'photo_prism_api_key' => getenv('PHOTO_PRISM_API_KEY') ?: '',
     'mosaic_columns' => 12,
     'mosaic_rows' => 12,
     'mosaic_limit' => 12 * 12,
