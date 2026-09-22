@@ -16,6 +16,7 @@ class PhotoPrismClient
 
     private const CONFIG_BASE_URL = 'photo_prism_base_url';
     private const CONFIG_ACCESS_TOKEN = 'photo_prism_access_token';
+    private const CONFIG_API_KEY = 'photo_prism_api_key';
 
     // --- Default cURL Options ---
     private const DEFAULT_TIMEOUT = 15;
@@ -24,6 +25,7 @@ class PhotoPrismClient
     // --- Class Properties ---
     private string $baseUrl;
     private string $accessToken;
+    private string $apiKey = '';
     private string $cacheDir = 'public/cache';
     private const CACHE_TTL = 3600; // 1 hour cache for albums
     private ?string $previewToken = null;
@@ -38,6 +40,7 @@ class PhotoPrismClient
         // as this enforces configuration correctness early.
         $rawBase = $config[self::CONFIG_BASE_URL] ?? '';
         $this->accessToken = $config[self::CONFIG_ACCESS_TOKEN] ?? '';
+        $this->apiKey = $config[self::CONFIG_API_KEY] ?? '';
 
         // Normalise base URL:
         // - Trim trailing slashes
@@ -51,6 +54,24 @@ class PhotoPrismClient
         if (empty($this->baseUrl)) {
             throw new InvalidArgumentException('Base URL must be configured.');
         }
+
+        // If apiKey wasn't provided via config, attempt to read a local .env file
+        // This helps when docker-compose injects env vars differently and the
+        // config.php load didn't populate the value.
+        if ($this->apiKey === '') {
+            $envFile = __DIR__ . '/.env';
+            if (is_readable($envFile)) {
+                $contents = @file_get_contents($envFile);
+                if ($contents !== false && preg_match('/^PHOTO_PRISM_API_KEY\s*=\s*(.+)$/m', $contents, $m)) {
+                    $val = trim($m[1], " \t\"'\r\n");
+                    if ($val !== '') {
+                        $this->apiKey = $val;
+                        // also export to environment for other consumers
+                        putenv('PHOTO_PRISM_API_KEY=' . $val);
+                    }
+                }
+            }
+        }
     }
 
     public function getConnectionDebug(): array
@@ -58,6 +79,7 @@ class PhotoPrismClient
         return [
             'baseUrl' => $this->baseUrl,
             'hasAccessToken' => $this->accessToken !== '',
+            'hasApiKey' => $this->apiKey !== '',
             'authType' => $this->getAuthType(),
             'timeout' => self::DEFAULT_TIMEOUT,
             'connectTimeout' => self::DEFAULT_CONNECT_TIMEOUT,
@@ -68,6 +90,10 @@ class PhotoPrismClient
     {
         if ($this->accessToken !== '') {
             return 'access_token';
+        }
+
+        if ($this->apiKey !== '') {
+            return 'api_key';
         }
 
         return 'none';
@@ -201,13 +227,78 @@ class PhotoPrismClient
         }
 
         $params = ['category' => $category, 'count' => $limit, 'order' => 'newest'];
-        $response = $this->request('/albums', $params);
-        $result = is_array($response) ? $response : [];
+
+        try {
+            // Try the albums endpoint first (preferred when allowed)
+            $response = $this->request('/albums', $params);
+            $result = is_array($response) ? $response : [];
+        } catch (\RuntimeException $e) {
+            // If permissions prevent access to albums, fall back to scanning photos
+            // and extracting album titles from the returned photo records. This
+            // preserves user-visible album titles even when the albums API is
+            // restricted.
+            if (stripos($e->getMessage(), 'permission') !== false) {
+                $result = [];
+                try {
+                    $photos = $this->request(self::PHOTOS_ENDPOINT, ['category' => $category, 'count' => $limit, 'order' => 'newest']);
+                    if (is_array($photos)) {
+                        $seen = [];
+                        foreach ($photos as $p) {
+                            // Photos may include embedded album objects or simple strings
+                            if (!empty($p['Albums']) && is_array($p['Albums'])) {
+                                foreach ($p['Albums'] as $a) {
+                                    $title = null;
+                                    foreach (['Title', 'title', 'Name', 'name'] as $k) {
+                                        if (!empty($a[$k]) && is_string($a[$k])) {
+                                            $title = (string) $a[$k];
+                                            break;
+                                        }
+                                    }
+                                    $uid = !empty($a['UID']) ? (string) $a['UID'] : (!empty($a['uid']) ? (string) $a['uid'] : '');
+                                    if ($title !== null && $title !== '') {
+                                        $seen[$title] = ['UID' => $uid, 'Title' => $title];
+                                    }
+                                }
+                            } elseif (!empty($p['albums']) && is_array($p['albums'])) {
+                                foreach ($p['albums'] as $a) {
+                                    $title = null;
+                                    if (is_string($a)) {
+                                        $title = $a;
+                                        $uid = '';
+                                    } elseif (is_array($a)) {
+                                        foreach (['Title', 'title', 'Name', 'name'] as $k) {
+                                            if (!empty($a[$k]) && is_string($a[$k])) {
+                                                $title = (string) $a[$k];
+                                                break;
+                                            }
+                                        }
+                                        $uid = !empty($a['UID']) ? (string) $a['UID'] : (!empty($a['uid']) ? (string) $a['uid'] : '');
+                                    } else {
+                                        $uid = '';
+                                    }
+
+                                    if ($title !== null && $title !== '') {
+                                        $seen[$title] = ['UID' => $uid, 'Title' => $title];
+                                    }
+                                }
+                            }
+                        }
+
+                        $result = array_values($seen);
+                    }
+                } catch (\RuntimeException $e2) {
+                    // If the fallback also fails, rethrow the original albums error
+                    throw $e;
+                }
+            } else {
+                throw $e;
+            }
+        }
 
         // Cache the result for 1 hour
-        $this->setCached($cacheKey, $result);
+        $this->setCached($cacheKey, is_array($result) ? $result : []);
 
-        return $result;
+        return is_array($result) ? $result : [];
     }
 
     /**
@@ -505,9 +596,20 @@ class PhotoPrismClient
             return $headers;
         }
 
+        // Always send any configured authentication headers. Prefer access token
+        // but also include an API key header if present. Some PhotoPrism deployments
+        // accept X-API-Key even when an access token is present.
         if ($this->accessToken !== '') {
             $headers[] = 'Authorization: Bearer ' . $this->accessToken;
             $headers[] = 'X-Auth-Token: ' . $this->accessToken;
+        }
+
+        // Ensure we pick up an API key either from the config passed in or from
+        // the runtime environment as a fallback (helps when docker-compose
+        // injects variables differently).
+        $apiKeyToUse = $this->apiKey !== '' ? $this->apiKey : (getenv('PHOTO_PRISM_API_KEY') ?: '');
+        if ($apiKeyToUse !== '') {
+            $headers[] = 'X-API-Key: ' . $apiKeyToUse;
         }
 
         return $headers;
