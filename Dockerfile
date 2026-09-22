@@ -22,7 +22,12 @@ RUN go mod download
 COPY . .
 # Copy built frontend into cmd/api/public so embed will include static files
 # Copy repository public/ (images, index.html) into cmd/api/public for embedding
+# Copy built frontend assets from node-builder (assumes build output to dist/)
+# Node builder merges public/ into dist/, so copy dist directly to include built assets for go:embed
+# First copy repository public/ so its files are present
+# then overlay with built assets from node-builder's dist so built files take precedence
 COPY public ./cmd/api/public
+COPY --from=node-builder /src/dist ./cmd/api/public
 # Also ensure generated docs are available for embed
 COPY docs ./cmd/api/docs
 RUN go build -o /out/image-mosaic ./cmd/api
@@ -32,8 +37,6 @@ FROM alpine:3.18
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=go-builder /out/image-mosaic /app/image-mosaic
-# Copy built frontend assets from node-builder (assumes build output to dist/ or public/)
-COPY --from=node-builder /src/dist ./cmd/api/public
 EXPOSE 8080
 ENV PHOTO_PRISM_BASE_URL=https://photoprism.example.com
 ENTRYPOINT ["/app/image-mosaic"]
