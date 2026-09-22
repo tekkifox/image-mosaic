@@ -38,9 +38,18 @@ class PhotoPrismClient
     {
         // Use throw exceptions for missing critical config values instead of assigning empty strings,
         // as this enforces configuration correctness early.
-        $this->baseUrl = rtrim($config[self::CONFIG_BASE_URL] ?? '', '/');
+        $rawBase = $config[self::CONFIG_BASE_URL] ?? '';
         $this->accessToken = $config[self::CONFIG_ACCESS_TOKEN] ?? '';
         $this->apiKey = $config[self::CONFIG_API_KEY] ?? '';
+
+        // Normalise base URL:
+        // - Trim trailing slashes
+        // - If a caller accidentally included an API path like /api or /api/v1, strip it
+        //   so the client always composes URLs as: {baseUrl}/api/v1/...
+        $base = rtrim((string) $rawBase, '/');
+        // Remove any trailing /api or /api/v<number> (case-insensitive)
+        $base = preg_replace('#(?:/api(?:/v[0-9]+)?)$#i', '', $base);
+        $this->baseUrl = $base !== null ? rtrim($base, '/') : '';
 
         if (empty($this->baseUrl)) {
             throw new InvalidArgumentException('Base URL must be configured.');
