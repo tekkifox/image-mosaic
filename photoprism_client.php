@@ -88,11 +88,14 @@ class PhotoPrismClient
 
     private function getAuthType(): string
     {
-        if ($this->accessToken !== '') {
+        $access = $this->accessToken !== '' ? $this->accessToken : (getenv('PHOTO_PRISM_ACCESS_TOKEN') ?: '');
+        $api = $this->apiKey !== '' ? $this->apiKey : (getenv('PHOTO_PRISM_API_KEY') ?: '');
+
+        if ($access !== '') {
             return 'access_token';
         }
 
-        if ($this->apiKey !== '') {
+        if ($api !== '') {
             return 'api_key';
         }
 
@@ -559,14 +562,15 @@ class PhotoPrismClient
         // Always send any configured authentication headers. Prefer access token
         // but also include an API key header if present. Some PhotoPrism deployments
         // accept X-API-Key even when an access token is present.
-        if ($this->accessToken !== '') {
-            $headers[] = 'Authorization: Bearer ' . $this->accessToken;
-            $headers[] = 'X-Auth-Token: ' . $this->accessToken;
+        // Resolve current tokens from instance properties or environment so runtime
+        // changes to .env or env vars are respected without requiring a process
+        // restart.
+        $accessToken = $this->accessToken !== '' ? $this->accessToken : (getenv('PHOTO_PRISM_ACCESS_TOKEN') ?: '');
+        if ($accessToken !== '') {
+            $headers[] = 'Authorization: Bearer ' . $accessToken;
+            $headers[] = 'X-Auth-Token: ' . $accessToken;
         }
 
-        // Ensure we pick up an API key either from the config passed in or from
-        // the runtime environment as a fallback (helps when docker-compose
-        // injects variables differently).
         $apiKeyToUse = $this->apiKey !== '' ? $this->apiKey : (getenv('PHOTO_PRISM_API_KEY') ?: '');
         if ($apiKeyToUse !== '') {
             $headers[] = 'X-API-Key: ' . $apiKeyToUse;
