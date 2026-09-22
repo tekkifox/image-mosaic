@@ -1,0 +1,75 @@
+info:
+  title: Image Mosaic API
+  version: 1.0
+  description: API for Image Mosaic (Go)
+paths:
+  /api/tiles:
+    get:
+      summary: Get mosaic tiles
+      parameters:
+        - name: category
+          in: query
+          required: true
+          type: string
+        - name: limit
+          in: query
+          required: false
+          type: integer
+        - name: offset
+          in: query
+          required: false
+          type: integer
+      responses:
+        '200':
+          description: tiles returned
+  /api/photo-count:
+    get:
+      summary: Get photo count
+      parameters:
+        - name: category
+          in: query
+          required: false
+          type: string
+      responses:
+        '200':
+          description: count returned
+  /api/albums:
+    get:
+      summary: Albums by category
+      parameters:
+        - name: category
+          in: query
+          required: true
+          type: string
+      responses:
+        '200':
+          description: albums list
+  /api/country-places:
+    get:
+      summary: Country/places aggregation
+      parameters:
+        - name: category
+          in: query
+          required: false
+          type: string
+      responses:
+        '200':
+          description: countries list
+  /api/featured:
+    get:
+      summary: Featured photo
+      parameters:
+        - name: category
+          in: query
+          required: false
+          type: string
+      responses:
+        '200':
+          description: featured photo
+  /api/debug:
+    get:
+      summary: Debug info
+      responses:
+        '200':
+          description: debug info
+swagger: "2.0"

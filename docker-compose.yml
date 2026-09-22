@@ -1,0 +1,38 @@
+services:
+  image-mosaic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: image-mosaic
+    ports:
+      - "8080:8080"
+    environment:
+      # PhotoPrism Configuration
+      PHOTO_PRISM_BASE_URL: ${PHOTO_PRISM_BASE_URL:-https://photoprism.example.com}
+      PHOTO_PRISM_API_KEY: ${PHOTO_PRISM_API_KEY:-}
+      PHOTO_PRISM_ACCESS_TOKEN: ${PHOTO_PRISM_ACCESS_TOKEN:-}
+      PHOTO_PRISM_USE_BASIC_AUTH: ${PHOTO_PRISM_USE_BASIC_AUTH:-false}
+      PHOTO_PRISM_USERNAME: ${PHOTO_PRISM_USERNAME:-}
+      PHOTO_PRISM_PASSWORD: ${PHOTO_PRISM_PASSWORD:-}
+      PHOTO_PRISM_OAUTH_CLIENT_ID: ${PHOTO_PRISM_OAUTH_CLIENT_ID:-}
+      PHOTO_PRISM_OAUTH_CLIENT_SECRET: ${PHOTO_PRISM_OAUTH_CLIENT_SECRET:-}
+    
+    # No local cache volume when running Go server; static assets are served from the image
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/photo-count?category=Travelling"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    
+    networks:
+      - image-mosaic-network
+
+volumes: {}
+
+networks:
+  image-mosaic-network:
+    driver: bridge

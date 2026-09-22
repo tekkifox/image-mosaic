@@ -1,0 +1,12 @@
+.env
+cache
+node_modules/
+dist/
+*.exe
+image-mosaic
+image-mosaic.exe
+
+# Ignore embedded public build outputs (we keep a .keep file to preserve dir)
+cmd/api/public/*
+!cmd/api/public/.keep
+npm-debug.log
