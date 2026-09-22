@@ -125,8 +125,10 @@ class PhotoPrismClient
                 $params['q'] = 'albums:"' . implode('" OR albums:"', $escaped) . '"';
             } else {
                 // Fallback: if no albums were discoverable (permission-restricted or none),
-                // ask the photos endpoint to filter by category directly.
+                // ask the photos endpoint to filter by category directly. Use both the
+                // category param and a query filter so this works across deployments.
                 $params['category'] = $category;
+                $params['q'] = 'category:"' . str_replace('"', '\\"', $category) . '"';
             }
         }
 
@@ -198,8 +200,10 @@ class PhotoPrismClient
                 $params['q'] = 'albums:"' . implode('" OR albums:"', $escaped) . '"';
             } else {
                 // If no albums could be resolved for the category, fall back to category
-                // filter on the photos endpoint so we still restrict results.
+                // filter on the photos endpoint so we still restrict results. Use both
+                // category and q=category:"..." for broader compatibility.
                 $params['category'] = $category;
+                $params['q'] = 'category:"' . str_replace('"', '\\"', $category) . '"';
             }
         }
 
