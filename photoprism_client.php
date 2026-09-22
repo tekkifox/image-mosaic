@@ -504,16 +504,20 @@ class PhotoPrismClient
             return $headers;
         }
 
-        // Prefer a bearer access token when available. Otherwise, fall back to API key header.
+        // Always send any configured authentication headers. Prefer access token
+        // but also include an API key header if present. Some PhotoPrism deployments
+        // accept X-API-Key even when an access token is present.
         if ($this->accessToken !== '') {
             $headers[] = 'Authorization: Bearer ' . $this->accessToken;
             $headers[] = 'X-Auth-Token: ' . $this->accessToken;
-            return $headers;
         }
 
-        if ($this->apiKey !== '') {
-            // PhotoPrism supports X-API-Key style header usage in some deployments.
-            $headers[] = 'X-API-Key: ' . $this->apiKey;
+        // Ensure we pick up an API key either from the config passed in or from
+        // the runtime environment as a fallback (helps when docker-compose
+        // injects variables differently).
+        $apiKeyToUse = $this->apiKey !== '' ? $this->apiKey : (getenv('PHOTO_PRISM_API_KEY') ?: '');
+        if ($apiKeyToUse !== '') {
+            $headers[] = 'X-API-Key: ' . $apiKeyToUse;
         }
 
         return $headers;
