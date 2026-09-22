@@ -116,7 +116,13 @@ class PhotoPrismClient
                     $albumTitles[] = $catAlbum['Title'];
                 }
             }
-            $params['q'] = 'albums:"' . implode('|', $albumTitles) . '"';
+            if (!empty($albumTitles)) {
+                $params['q'] = 'albums:"' . implode('|', $albumTitles) . '"';
+            } else {
+                // Fallback: if no albums were discoverable (permission-restricted or none),
+                // ask the photos endpoint to filter by category directly.
+                $params['category'] = $category;
+            }
         }
 
         if (!empty($album)) {
@@ -180,7 +186,13 @@ class PhotoPrismClient
                     $albumTitles[] = $catAlbum['Title'];
                 }
             }
-            $params['q'] = 'albums:"' . implode('|', $albumTitles) . '"';
+            if (!empty($albumTitles)) {
+                $params['q'] = 'albums:"' . implode('|', $albumTitles) . '"';
+            } else {
+                // If no albums could be resolved for the category, fall back to category
+                // filter on the photos endpoint so we still restrict results.
+                $params['category'] = $category;
+            }
         }
 
         if (!empty($album)) {
