@@ -786,25 +786,41 @@ func tilesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Ask Photoprism for enough photos to satisfy offset+limit
-	fetchCount := offset + limit
-	photos, err := listPhotos(fetchCount, "", category, "random")
+	// Ask Photoprism for enough photos to satisfy offset+limit + 1 to detect whether more are available
+	fetchCount := offset + limit + 1
+	allPhotos, err := listPhotos(fetchCount, "", category, "random")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	// slice
-	if offset > len(photos) {
+	origCount := len(allPhotos)
+
+	// slice to requested window
+	var photos []map[string]any
+	if offset > origCount {
 		photos = []map[string]any{}
 	} else {
 		end := offset + limit
-		if end > len(photos) {
-			end = len(photos)
+		if end > origCount {
+			end = origCount
 		}
-		photos = photos[offset:end]
+		photos = allPhotos[offset:end]
 	}
+
 	tiles := buildTiles(photos)
+
+	// Determine hasMore from whether we fetched more than offset+limit
+	hasMore := origCount > offset+limit
+
+	// Try to obtain a reliable total; if unavailable, estimate from fetched counts
 	total := getPhotoCount("", category)
+	if total <= 0 {
+		total = offset + len(photos)
+		if hasMore {
+			total = total + 1
+		}
+	}
+
 	// Cache tiles response briefly to reduce repeated downstream load
 	writeJSONWithCache(w, http.StatusOK, map[string]any{
 		"columns": 12,
@@ -813,7 +829,7 @@ func tilesHandler(w http.ResponseWriter, r *http.Request) {
 		"total":   total,
 		"offset":  offset,
 		"limit":   limit,
-		"hasMore": (offset+len(tiles) < total),
+		"hasMore": hasMore,
 	}, 30)
 }
 
@@ -1003,10 +1019,47 @@ func listPhotos(limit int, album, category, order string) ([]map[string]any, err
 }
 
 func getPhotoCount(album, category string) int {
+	// Try viewer-formatted endpoint first then fallback to the plain photos endpoint.
 	params := map[string]string{"count": "10000", "order": "random"}
 	if category != "" {
-		params["q"] = fmt.Sprintf("category:\"%s\"", category)
+		// 1) try viewer-formatted by category
+		p := map[string]string{"count": "10000", "order": "random", "q": fmt.Sprintf("category:\"%s\"", category)}
+		if photos, err := photosRequest("/api/v1/photos/view", p); err == nil && len(photos) > 0 {
+			return len(photos)
+		}
+		// 2) try viewer-formatted by path
+		p["q"] = fmt.Sprintf("path:\"%s\"", category)
+		if photos, err := photosRequest("/api/v1/photos/view", p); err == nil && len(photos) > 0 {
+			return len(photos)
+		}
+		// 3) try plain photos by category
+		p2 := map[string]string{"count": "10000", "order": "random", "q": fmt.Sprintf("category:\"%s\"", category)}
+		if photos, err := photosRequest("/api/v1/photos", p2); err == nil && len(photos) > 0 {
+			return len(photos)
+		}
+		// 4) try plain photos by path
+		p2["q"] = fmt.Sprintf("path:\"%s\"", category)
+		if photos, err := photosRequest("/api/v1/photos", p2); err == nil && len(photos) > 0 {
+			return len(photos)
+		}
+		// no direct results — as a last resort, fetch a large sample and count Path substring matches
+		allParams := map[string]string{"count": "10000", "order": "random"}
+		if allPhotos, err := photosRequest("/api/v1/photos", allParams); err == nil && len(allPhotos) > 0 {
+			cnt := 0
+			lower := strings.ToLower(category)
+			for _, p := range allPhotos {
+				if path := toString(p["Path"]); path != "" {
+					if strings.Contains(strings.ToLower(path), lower) {
+						cnt++
+					}
+				}
+			}
+			return cnt
+		}
+		return 0
 	}
+
+	// no category: count all (limited to 10000)
 	photos, err := photosRequest("/api/v1/photos", params)
 	if err != nil {
 		return 0
