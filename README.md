@@ -19,7 +19,8 @@ Quick start (local)
    - PHOTO_PRISM_USERNAME / PHOTO_PRISM_PASSWORD — credentials the server can POST to /api/v1/session to obtain preview/download tokens automatically
    - PHOTO_PRISM_PREVIEW_TOKEN — short-lived preview token (if you already have one)
    - PHOTO_PRISM_DOWNLOAD_TOKEN — (advanced) download token if used by your Photoprism instance
-   - TRANSLATE_API_URL / TRANSLATE_API_KEY — optional translation API to translate place names to English; if not present the server will transliterate place names
+- TRANSLATE_API_URL / TRANSLATE_API_KEY — optional translation API to translate place names to English; if not present the server will transliterate place names
+ - TRANSLATE_API_URL / TRANSLATE_API_KEY — optional translation API to translate place names to English. If you provide TRANSLATE_API_KEY the server will call Google Cloud Translation v2 automatically. Alternatively you can set TRANSLATE_API_URL to a LibreTranslate-compatible endpoint.
 
 2. Build and run with Docker Compose:
 

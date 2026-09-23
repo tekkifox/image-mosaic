@@ -482,76 +482,98 @@ var translateCacheMu sync.RWMutex
 // translateText tries to translate text to English using a configured translation API (libre-style).
 // Falls back to simple transliteration if no API is configured.
 func translateText(text string) string {
-	if text == "" {
-		return text
-	}
-	translateCacheMu.RLock()
-	if v, ok := translateCache[text]; ok {
-		translateCacheMu.RUnlock()
-		return v
-	}
-	translateCacheMu.RUnlock()
+    if text == "" {
+        return text
+    }
+    translateCacheMu.RLock()
+    if v, ok := translateCache[text]; ok {
+        translateCacheMu.RUnlock()
+        return v
+    }
+    translateCacheMu.RUnlock()
+    // Prefer Google Translate when an API key is configured
+    if cfg.TranslateAPIKey != "" {
+        gURL := "https://translation.googleapis.com/language/translate/v2?key=" + url.QueryEscape(cfg.TranslateAPIKey)
+        // Google accepts JSON body with q, target, format
+        reqBody := map[string]any{"q": text, "target": "en", "format": "text"}
+        b, _ := json.Marshal(reqBody)
+        req, _ := http.NewRequest("POST", gURL, bytes.NewReader(b))
+        req.Header.Set("Content-Type", "application/json")
+        client := &http.Client{Timeout: 10 * time.Second}
+        resp, err := client.Do(req)
+        if err == nil {
+            defer resp.Body.Close()
+            body, _ := io.ReadAll(resp.Body)
+            var obj map[string]any
+            if json.Unmarshal(body, &obj) == nil {
+                if data, ok := obj["data"].(map[string]any); ok {
+                    if arr, ok := data["translations"].([]any); ok && len(arr) > 0 {
+                        if first, ok := arr[0].(map[string]any); ok {
+                            if t, ok := first["translatedText"].(string); ok && t != "" {
+                                translateCacheMu.Lock()
+                                translateCache[text] = t
+                                translateCacheMu.Unlock()
+                                return t
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-	// If no translate API configured, transliterate
-	if cfg.TranslateAPIURL == "" {
-		out := transliterate(text)
-		translateCacheMu.Lock()
-		translateCache[text] = out
-		translateCacheMu.Unlock()
-		return out
-	}
+    // If a custom Translate API URL is configured, call it (Libre-like API)
+    if cfg.TranslateAPIURL != "" {
+        reqBody := map[string]string{"q": text, "source": "auto", "target": "en", "format": "text"}
+        b, _ := json.Marshal(reqBody)
+        req, _ := http.NewRequest("POST", cfg.TranslateAPIURL, bytes.NewReader(b))
+        req.Header.Set("Content-Type", "application/json")
+        if cfg.TranslateAPIKey != "" {
+            req.Header.Set("Authorization", "Bearer "+cfg.TranslateAPIKey)
+            req.Header.Set("X-API-Key", cfg.TranslateAPIKey)
+        }
+        client := &http.Client{Timeout: 10 * time.Second}
+        resp, err := client.Do(req)
+        if err == nil {
+            defer resp.Body.Close()
+            body, _ := io.ReadAll(resp.Body)
+            var obj map[string]any
+            if json.Unmarshal(body, &obj) == nil {
+                if v, ok := obj["translatedText"].(string); ok && v != "" {
+                    translateCacheMu.Lock()
+                    translateCache[text] = v
+                    translateCacheMu.Unlock()
+                    return v
+                }
+                if data, ok := obj["data"].(map[string]any); ok {
+                    if arr, ok := data["translations"].([]any); ok && len(arr) > 0 {
+                        if first, ok := arr[0].(map[string]any); ok {
+                            if t, ok := first["translatedText"].(string); ok && t != "" {
+                                translateCacheMu.Lock()
+                                translateCache[text] = t
+                                translateCacheMu.Unlock()
+                                return t
+                            }
+                        }
+                    }
+                }
+                var plain string
+                if json.Unmarshal(body, &plain) == nil && plain != "" {
+                    translateCacheMu.Lock()
+                    translateCache[text] = plain
+                    translateCacheMu.Unlock()
+                    return plain
+                }
+            }
+        }
+    }
 
-	// Call translate API (libre-style)
-	reqBody := map[string]string{"q": text, "source": "auto", "target": "en", "format": "text"}
-	b, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", cfg.TranslateAPIURL, bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
-	if cfg.TranslateAPIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.TranslateAPIKey)
-		req.Header.Set("X-API-Key", cfg.TranslateAPIKey)
-	}
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err == nil {
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		var obj map[string]any
-		if json.Unmarshal(body, &obj) == nil {
-			if v, ok := obj["translatedText"].(string); ok && v != "" {
-				translateCacheMu.Lock()
-				translateCache[text] = v
-				translateCacheMu.Unlock()
-				return v
-			}
-			if data, ok := obj["data"].(map[string]any); ok {
-				if arr, ok := data["translations"].([]any); ok && len(arr) > 0 {
-					if first, ok := arr[0].(map[string]any); ok {
-						if t, ok := first["translatedText"].(string); ok && t != "" {
-							translateCacheMu.Lock()
-							translateCache[text] = t
-							translateCacheMu.Unlock()
-							return t
-						}
-					}
-				}
-			}
-			// Some APIs return plain string
-			var plain string
-			if json.Unmarshal(body, &plain) == nil && plain != "" {
-				translateCacheMu.Lock()
-				translateCache[text] = plain
-				translateCacheMu.Unlock()
-				return plain
-			}
-		}
-	}
-
-	// fallback transliteration
-	out := transliterate(text)
-	translateCacheMu.Lock()
-	translateCache[text] = out
-	translateCacheMu.Unlock()
-	return out
+    // fallback transliteration
+    out := transliterate(text)
+    translateCacheMu.Lock()
+    translateCache[text] = out
+    translateCacheMu.Unlock()
+    return out
 }
 
 // transliterate removes diacritics and attempts to normalize text into ASCII-friendly form.
@@ -953,16 +975,21 @@ func listPhotos(limit int, album, category, order string) ([]map[string]any, err
 		return []map[string]any{}, nil
 	}
 
-	// No category: simple photos request
-	params := map[string]string{"count": strconv.Itoa(limit), "order": order}
-	if album != "" {
-		params["q"] = fmt.Sprintf("albums:\"%s\"", album)
-	}
-	photos, err := photosRequest("/api/v1/photos", params)
-	if err != nil {
-		return nil, err
-	}
-	return photos, nil
+    // No category: request viewer-formatted entries directly to include thumbnails and viewer fields
+    params := map[string]string{"count": strconv.Itoa(limit), "order": order}
+    if album != "" {
+        params["q"] = fmt.Sprintf("albums:\"%s\"", album)
+    }
+    photos, err := photosRequest("/api/v1/photos/view", params)
+    if err == nil && len(photos) > 0 {
+        return photos, nil
+    }
+    // fallback to plain photos if viewer endpoint didn't return results
+    photos, err = photosRequest("/api/v1/photos", params)
+    if err != nil {
+        return nil, err
+    }
+    return photos, nil
 }
 
 func getPhotoCount(album, category string) int {
@@ -1031,60 +1058,22 @@ func buildTiles(photos []map[string]any) []map[string]any {
 		return ""
 	}
 
-	// Build batch query parts from provided photos (UID preferred, fallback to Hash)
-	var qParts []string
-	uidList := []string{}
-	for _, p := range photos {
-		uid := toString(p["UID"])
-		if uid == "" {
-			uid = toString(p["PhotoUID"])
-		}
-		if uid != "" {
-			qParts = append(qParts, fmt.Sprintf("uid:\"%s\"", uid))
-			uidList = append(uidList, uid)
-			continue
-		}
-		if h := toString(p["Hash"]); h != "" {
-			qParts = append(qParts, fmt.Sprintf("hash:\"%s\"", h))
-		}
-	}
-
-	viewMap := map[string]map[string]any{}
-	detailMap := map[string]map[string]any{}
-	if len(qParts) > 0 {
-		q := strings.Join(qParts, "|")
-		params := map[string]string{"count": strconv.Itoa(len(qParts)), "order": "newest", "q": q}
-		// batch viewer-formatted entries
-		if views, err := photosRequest("/api/v1/photos/view", params); err == nil {
-			for _, v := range views {
-				id := toString(v["UID"])
-				if id == "" {
-					id = toString(v["uid"])
-				}
-				if id != "" {
-					viewMap[id] = v
-				}
-				if h := toString(v["Hash"]); h != "" {
-					viewMap["hash:"+h] = v
-				}
-			}
-		}
-		// batch full photo details
-		if details, err := photosRequest("/api/v1/photos", params); err == nil {
-			for _, d := range details {
-				id := toString(d["UID"])
-				if id == "" {
-					id = toString(d["uid"])
-				}
-				if id != "" {
-					detailMap[id] = d
-				}
-				if h := toString(d["Hash"]); h != "" {
-					detailMap["hash:"+h] = d
-				}
-			}
-		}
-	}
+    // photos passed into buildTiles are expected to be viewer-formatted entries (from /api/v1/photos/view)
+    // Build viewMap from the provided photos so we do not need an extra batch /api/v1/photos call.
+    viewMap := map[string]map[string]any{}
+    detailMap := map[string]map[string]any{}
+    for _, v := range photos {
+        id := toString(v["UID"])
+        if id == "" {
+            id = toString(v["uid"])
+        }
+        if id != "" {
+            viewMap[id] = v
+        }
+        if h := toString(v["Hash"]); h != "" {
+            viewMap["hash:"+h] = v
+        }
+    }
 
 	// Collect UIDs that still lack album information and fetch details for them concurrently.
 	var missingUIDs []string
