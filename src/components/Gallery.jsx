@@ -59,10 +59,16 @@ const Gallery = () => {
         if (data && Array.isArray(data.tiles)) {
           setColumns(data.columns || 12);
           setTotalPhotos(data.total || 0);
-          setHasMore((data.offset || 0) + (data.tiles?.length || 0) < (data.total || 0));
+          // Prefer server-provided hasMore when available, otherwise derive from total
+          if (typeof data.hasMore === 'boolean') {
+            setHasMore(data.hasMore);
+          } else {
+            setHasMore((data.offset || 0) + (data.tiles?.length || 0) < (data.total || 0));
+          }
           const mapped = data.tiles.map(mapTile);
           setItems(mapped);
-          setCurrentOffset(ITEMS_PER_PAGE);
+          // currentOffset should reflect actual number of loaded items
+          setCurrentOffset((data.offset || 0) + (data.tiles?.length || mapped.length));
           setLoading(false);
         }
       })
@@ -116,12 +122,36 @@ const Gallery = () => {
           loadMorePhotos();
         }
       },
-      { rootMargin: '200px' }
+      { rootMargin: '400px' }
     );
 
     observer.observe(loadTriggerRef);
     return () => observer.disconnect();
   }, [loadTriggerRef, hasMore, isLoadingMore, currentOffset]);
+
+  // Fallback: also listen to scroll events in case IntersectionObserver doesn't trigger in some browsers/layouts
+  useEffect(() => {
+    if (!hasMore) return;
+    let ticking = false;
+    const onScroll = () => {
+      if (isLoadingMore || !hasMore) return;
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        const nearBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.offsetHeight - 600);
+        if (nearBottom) {
+          loadMorePhotos();
+        }
+        ticking = false;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [hasMore, isLoadingMore, currentOffset]);
 
   // Update photo count in hero section (outside React root)
   useEffect(() => {
