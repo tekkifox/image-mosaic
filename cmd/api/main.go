@@ -1217,12 +1217,13 @@ func buildTiles(photos []map[string]any) []map[string]any {
 		}
 
 		// Choose a token to use in tokenized /api/v1/t URLs: prefer PreviewToken, then Access token, then Download token
+		// prefer access token first, then preview token, then download token
 		chooseToken := func() string {
-			if cfg.PhotoPrismPreviewToken != "" {
-				return cfg.PhotoPrismPreviewToken
-			}
 			if cfg.PhotoPrismToken != "" {
 				return cfg.PhotoPrismToken
+			}
+			if cfg.PhotoPrismPreviewToken != "" {
+				return cfg.PhotoPrismPreviewToken
 			}
 			if cfg.PhotoPrismDownloadToken != "" {
 				return cfg.PhotoPrismDownloadToken
@@ -1267,8 +1268,8 @@ func buildTiles(photos []map[string]any) []map[string]any {
 
 		// Final fallback: construct direct PhotoPrism URLs (prefer tokenized /api/v1/t when preview token available)
 		if thumb == "" {
-			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
-				thumb = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "tile_224")
+			if hash != "" && token != "" {
+				thumb = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(token), "tile_224")
 			} else if uid != "" {
 				thumb = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
 			} else if hash != "" {
@@ -1277,8 +1278,8 @@ func buildTiles(photos []map[string]any) []map[string]any {
 			}
 		}
 		if medium == "" {
-			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
-				medium = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_720")
+			if hash != "" && token != "" {
+				medium = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(token), "fit_720")
 			} else if uid != "" {
 				medium = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
 			} else if hash != "" {
@@ -1286,8 +1287,8 @@ func buildTiles(photos []map[string]any) []map[string]any {
 			}
 		}
 		if full == "" {
-			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
-				full = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_1920")
+			if hash != "" && token != "" {
+				full = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(token), "fit_1280")
 			} else if uid != "" {
 				full = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
 			} else if hash != "" {
@@ -1367,6 +1368,8 @@ func buildTiles(photos []map[string]any) []map[string]any {
 				}
 			}
 		}
+
+		// (debugging removed)
 
 		tiles = append(tiles, map[string]any{
 			"title":      title,
