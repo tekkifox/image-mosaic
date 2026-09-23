@@ -664,8 +664,7 @@ func main() {
 	publicFS, _ := fs.Sub(embeddedFiles, "public")
 	http.Handle("/", http.FileServer(http.FS(publicFS)))
 
-	// Image proxy endpoint to stream images from PhotoPrism using server-side auth
-	http.HandleFunc("/api/proxy/photo", photoProxyHandler)
+    // Note: image proxy endpoint removed — tiles now use direct PhotoPrism URLs when possible
 
 	port := getenv("PORT", "8080")
 	addr := ":" + port
@@ -1246,28 +1245,35 @@ func buildTiles(photos []map[string]any) []map[string]any {
 			}
 		}
 
-		// Final fallback: proxy endpoints
-		if thumb == "" {
-			if uid != "" {
-				thumb = fmt.Sprintf("/api/proxy/photo?uid=%s&size=%s", url.QueryEscape(uid), url.QueryEscape("tile_224"))
-			} else if hash != "" {
-				thumb = fmt.Sprintf("/api/proxy/photo?hash=%s&size=%s", url.QueryEscape(hash), url.QueryEscape("tile_224"))
-			}
-		}
-		if medium == "" {
-			if uid != "" {
-				medium = fmt.Sprintf("/api/proxy/photo?uid=%s&size=%s", url.QueryEscape(uid), url.QueryEscape("fit_720"))
-			} else if hash != "" {
-				medium = fmt.Sprintf("/api/proxy/photo?hash=%s&size=%s", url.QueryEscape(hash), url.QueryEscape("fit_720"))
-			}
-		}
-		if full == "" {
-			if uid != "" {
-				full = fmt.Sprintf("/api/proxy/photo?uid=%s&size=%s", url.QueryEscape(uid), url.QueryEscape("fit_1920"))
-			} else if hash != "" {
-				full = fmt.Sprintf("/api/proxy/photo?hash=%s&size=%s", url.QueryEscape(hash), url.QueryEscape("fit_1920"))
-			}
-		}
+        // Final fallback: construct direct PhotoPrism URLs (prefer tokenized /api/v1/t when preview token available)
+        if thumb == "" {
+            if hash != "" && cfg.PhotoPrismPreviewToken != "" {
+                thumb = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "tile_224")
+            } else if uid != "" {
+                thumb = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+            } else if hash != "" {
+                // fallback: direct photos query (not an image URL, but better than local proxy)
+                thumb = fmt.Sprintf("%s/api/v1/photos?count=1&q=hash:%s", base, url.QueryEscape(hash))
+            }
+        }
+        if medium == "" {
+            if hash != "" && cfg.PhotoPrismPreviewToken != "" {
+                medium = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_720")
+            } else if uid != "" {
+                medium = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+            } else if hash != "" {
+                medium = fmt.Sprintf("%s/api/v1/photos?count=1&q=hash:%s", base, url.QueryEscape(hash))
+            }
+        }
+        if full == "" {
+            if hash != "" && cfg.PhotoPrismPreviewToken != "" {
+                full = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_1920")
+            } else if uid != "" {
+                full = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+            } else if hash != "" {
+                full = fmt.Sprintf("%s/api/v1/photos?count=1&q=hash:%s", base, url.QueryEscape(hash))
+            }
+        }
 
 		// collect album titles
 		albumTitles := []string{}
