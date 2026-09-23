@@ -1216,30 +1216,52 @@ func buildTiles(photos []map[string]any) []map[string]any {
 			}
 		}
 
-		// If not present, construct tokenized URLs (preferred) or direct downloads as fallback
-		if thumb == "" {
-			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
-				thumb = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "tile_224")
-			} else if uid != "" {
-				thumb = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+		// Choose a token to use in tokenized /api/v1/t URLs: prefer PreviewToken, then Access token, then Download token
+		chooseToken := func() string {
+			if cfg.PhotoPrismPreviewToken != "" {
+				return cfg.PhotoPrismPreviewToken
 			}
-		}
-		if medium == "" {
-			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
-				medium = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_720")
-			} else if uid != "" {
-				medium = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
-			} else {
-				medium = thumb
+			if cfg.PhotoPrismToken != "" {
+				return cfg.PhotoPrismToken
 			}
+			if cfg.PhotoPrismDownloadToken != "" {
+				return cfg.PhotoPrismDownloadToken
+			}
+			return ""
 		}
-		if full == "" {
-			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
-				full = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_1280")
-			} else if uid != "" {
-				full = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
-			} else {
-				full = medium
+		token := chooseToken()
+
+		// If a token is available and we have a hash, prefer tokenized URLs for medium and full
+		if token != "" && hash != "" {
+			// thumb: prefer existing tile_224 from viewer, otherwise construct tokenized tile_224
+			if thumb == "" {
+				thumb = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(token), "tile_224")
+			}
+			// Always prefer tokenized medium/full sizes when token available
+			medium = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(token), "fit_720")
+			full = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(token), "fit_1280")
+		} else {
+			// No token: fall back to viewer-provided sizes or to direct download
+			if thumb == "" {
+				if uid != "" {
+					thumb = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+				} else if hash != "" {
+					thumb = fmt.Sprintf("%s/api/v1/photos?count=1&q=hash:%s", base, url.QueryEscape(hash))
+				}
+			}
+			if medium == "" {
+				if uid != "" {
+					medium = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+				} else {
+					medium = thumb
+				}
+			}
+			if full == "" {
+				if uid != "" {
+					full = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+				} else {
+					full = medium
+				}
 			}
 		}
 
