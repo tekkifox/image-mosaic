@@ -664,7 +664,7 @@ func main() {
 	publicFS, _ := fs.Sub(embeddedFiles, "public")
 	http.Handle("/", http.FileServer(http.FS(publicFS)))
 
-    // Note: image proxy endpoint removed — tiles now use direct PhotoPrism URLs when possible
+	// Note: image proxy endpoint removed — tiles now use direct PhotoPrism URLs when possible
 
 	port := getenv("PORT", "8080")
 	addr := ":" + port
@@ -1016,57 +1016,6 @@ func getPhotoCount(album, category string) int {
 
 func buildTiles(photos []map[string]any) []map[string]any {
 	var tiles []map[string]any
-	preview := fetchPreviewToken()
-
-	// helper to extract a usable thumbnail URL from a PhotoPrism photo object
-	getThumbFromPhoto := func(p map[string]any, preview string) string {
-		// check common immediate fields
-		keys := []string{"Thumb", "ThumbSrc", "ThumbUrl", "thumbUrl", "thumb", "thumbSrc", "ThumbSmall", "ThumbMedium"}
-		for _, k := range keys {
-			if v, ok := p[k]; ok {
-				s := toString(v)
-				if s == "" {
-					continue
-				}
-				if strings.HasPrefix(s, "/") {
-					return strings.TrimRight(cfg.PhotoPrismBaseURL, "/") + s
-				}
-				return s
-			}
-		}
-
-		// check Files array for a thumb or hash
-		if files, ok := p["Files"].([]any); ok && len(files) > 0 {
-			for _, it := range files {
-				if fm, ok := it.(map[string]any); ok {
-					for _, k := range []string{"Thumb", "ThumbSrc", "ThumbUrl", "Hash"} {
-						if v, ok := fm[k]; ok {
-							s := toString(v)
-							if s == "" {
-								continue
-							}
-							if k == "Hash" {
-								if preview != "" {
-									return fmt.Sprintf("%s/api/v1/t/%s/%s/%s", strings.TrimRight(cfg.PhotoPrismBaseURL, "/"), url.PathEscape(s), url.PathEscape(preview), "tile_224")
-								}
-								continue
-							}
-							if strings.HasPrefix(s, "/") {
-								return strings.TrimRight(cfg.PhotoPrismBaseURL, "/") + s
-							}
-							return s
-						}
-					}
-				}
-			}
-		}
-
-		// fallback: construct tile URL from Hash if we have a preview token
-		if hash := toString(p["Hash"]); hash != "" && preview != "" {
-			return fmt.Sprintf("%s/api/v1/t/%s/%s/%s", strings.TrimRight(cfg.PhotoPrismBaseURL, "/"), url.PathEscape(hash), url.PathEscape(preview), "tile_224")
-		}
-		return ""
-	}
 
 	// photos passed into buildTiles are expected to be viewer-formatted entries (from /api/v1/photos/view)
 	// Build viewMap from the provided photos so we do not need an extra batch /api/v1/photos call.
@@ -1166,114 +1115,110 @@ func buildTiles(photos []map[string]any) []map[string]any {
 			uid = toString(p["PhotoUID"])
 		}
 
-		// Build thumb/medium/full URLs using viewer batch results, preview token, or fallbacks.
+		// Build thumb/medium/full URLs using viewer batch results, with consistent sizes:
+		//  - thumb: tile_224
+		//  - medium: fit_720
+		//  - full: fit_1280
 		var thumb, medium, full string
 		base := strings.TrimRight(cfg.PhotoPrismBaseURL, "/")
 
-		// helper to pick a src from Thumbs map
-		pickFromThumbs := func(thumbs map[string]any, keys []string) string {
-			for _, key := range keys {
-				if it, ok := thumbs[key]; ok {
-					if m, ok := it.(map[string]any); ok {
-						if src := toString(m["src"]); src != "" {
-							if strings.HasPrefix(src, "/") {
-								return base + src
-							}
-							return src
+		// helper to pick exact size key from Thumbs map
+		pickExact := func(thumbs map[string]any, key string) string {
+			if it, ok := thumbs[key]; ok {
+				if m, ok := it.(map[string]any); ok {
+					if src := toString(m["src"]); src != "" {
+						if strings.HasPrefix(src, "/") {
+							return base + src
 						}
+						return src
 					}
 				}
 			}
 			return ""
 		}
 
+		// prefer viewer-provided Thumbs when available
 		if uid != "" {
 			if v, ok := viewMap[uid]; ok && v != nil {
 				if thumbs, ok := v["Thumbs"].(map[string]any); ok {
-					// thumb should be small tile
-					thumb = pickFromThumbs(thumbs, []string{"tile_224", "fit_720", "fit_1280", "fit_1920"})
-					// medium prefers fit_720/fit_1280 (do not fall back to tile_224 here so we can construct a larger preview)
-					medium = pickFromThumbs(thumbs, []string{"fit_720", "fit_1280", "fit_1920"})
-					// full prefers highest available (do not fall back to tile_224)
-					full = pickFromThumbs(thumbs, []string{"fit_1920", "fit_1280", "fit_720"})
+					thumb = pickExact(thumbs, "tile_224")
+					medium = pickExact(thumbs, "fit_720")
+					full = pickExact(thumbs, "fit_1280")
 				}
 			}
 		}
-		// support hash-keyed view entries
-		if hash != "" {
+		if thumb == "" && hash != "" {
 			if v, ok := viewMap["hash:"+hash]; ok && v != nil {
 				if thumbs, ok := v["Thumbs"].(map[string]any); ok {
 					if thumb == "" {
-						thumb = pickFromThumbs(thumbs, []string{"tile_224", "fit_720", "fit_1280", "fit_1920"})
+						thumb = pickExact(thumbs, "tile_224")
 					}
 					if medium == "" {
-						medium = pickFromThumbs(thumbs, []string{"fit_720", "fit_1280", "fit_1920"})
+						medium = pickExact(thumbs, "fit_720")
 					}
 					if full == "" {
-						full = pickFromThumbs(thumbs, []string{"fit_1920", "fit_1280", "fit_720"})
+						full = pickExact(thumbs, "fit_1280")
 					}
 				}
 			}
 		}
 
-		// If medium/full not found in viewer results but we have a preview token + hash, construct tokenized URLs
-		if medium == "" && cfg.PhotoPrismPreviewToken != "" && hash != "" {
-			medium = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_720")
-		}
-		if full == "" && cfg.PhotoPrismPreviewToken != "" && hash != "" {
-			full = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_1920")
-		}
-
-		// If thumb still empty, try immediate fields
+		// If not present, construct tokenized URLs (preferred) or direct downloads as fallback
 		if thumb == "" {
-			thumb = getThumbFromPhoto(p, preview)
+			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
+				thumb = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "tile_224")
+			} else if uid != "" {
+				thumb = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+			}
 		}
-
-		// If thumb found but medium still empty, try to pick a larger size via preview token or fall back to thumb
 		if medium == "" {
-			if cfg.PhotoPrismPreviewToken != "" && hash != "" {
+			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
 				medium = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_720")
+			} else if uid != "" {
+				medium = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
 			} else {
 				medium = thumb
 			}
 		}
 		if full == "" {
-			if cfg.PhotoPrismPreviewToken != "" && hash != "" {
-				full = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_1920")
+			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
+				full = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_1280")
+			} else if uid != "" {
+				full = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
 			} else {
 				full = medium
 			}
 		}
 
-        // Final fallback: construct direct PhotoPrism URLs (prefer tokenized /api/v1/t when preview token available)
-        if thumb == "" {
-            if hash != "" && cfg.PhotoPrismPreviewToken != "" {
-                thumb = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "tile_224")
-            } else if uid != "" {
-                thumb = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
-            } else if hash != "" {
-                // fallback: direct photos query (not an image URL, but better than local proxy)
-                thumb = fmt.Sprintf("%s/api/v1/photos?count=1&q=hash:%s", base, url.QueryEscape(hash))
-            }
-        }
-        if medium == "" {
-            if hash != "" && cfg.PhotoPrismPreviewToken != "" {
-                medium = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_720")
-            } else if uid != "" {
-                medium = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
-            } else if hash != "" {
-                medium = fmt.Sprintf("%s/api/v1/photos?count=1&q=hash:%s", base, url.QueryEscape(hash))
-            }
-        }
-        if full == "" {
-            if hash != "" && cfg.PhotoPrismPreviewToken != "" {
-                full = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_1920")
-            } else if uid != "" {
-                full = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
-            } else if hash != "" {
-                full = fmt.Sprintf("%s/api/v1/photos?count=1&q=hash:%s", base, url.QueryEscape(hash))
-            }
-        }
+		// Final fallback: construct direct PhotoPrism URLs (prefer tokenized /api/v1/t when preview token available)
+		if thumb == "" {
+			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
+				thumb = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "tile_224")
+			} else if uid != "" {
+				thumb = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+			} else if hash != "" {
+				// fallback: direct photos query (not an image URL, but better than local proxy)
+				thumb = fmt.Sprintf("%s/api/v1/photos?count=1&q=hash:%s", base, url.QueryEscape(hash))
+			}
+		}
+		if medium == "" {
+			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
+				medium = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_720")
+			} else if uid != "" {
+				medium = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+			} else if hash != "" {
+				medium = fmt.Sprintf("%s/api/v1/photos?count=1&q=hash:%s", base, url.QueryEscape(hash))
+			}
+		}
+		if full == "" {
+			if hash != "" && cfg.PhotoPrismPreviewToken != "" {
+				full = fmt.Sprintf("%s/api/v1/t/%s/%s/%s", base, url.PathEscape(hash), url.PathEscape(cfg.PhotoPrismPreviewToken), "fit_1920")
+			} else if uid != "" {
+				full = fmt.Sprintf("%s/api/v1/photos/%s/dl", base, url.PathEscape(uid))
+			} else if hash != "" {
+				full = fmt.Sprintf("%s/api/v1/photos?count=1&q=hash:%s", base, url.QueryEscape(hash))
+			}
+		}
 
 		// collect album titles
 		albumTitles := []string{}
