@@ -12,7 +12,7 @@ RUN npm run build
     RUN if [ -d public ]; then cp -a public/. dist/ || true; fi
 
 ### Go builder
-FROM golang:1.21-alpine AS go-builder
+FROM golang:1.26-alpine AS go-builder
 WORKDIR /src
 COPY cmd ./cmd
 COPY go.mod go.sum ./
