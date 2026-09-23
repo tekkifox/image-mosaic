@@ -14,6 +14,12 @@ Quick start (local)
    - PHOTO_PRISM_BASE_URL (required) — e.g. https://photoprism.example.com
    - PHOTO_PRISM_ACCESS_TOKEN (optional)
    - PHOTO_PRISM_API_KEY (optional)
+   Additional (optional) environment variables supported by the Go server:
+
+   - PHOTO_PRISM_USERNAME / PHOTO_PRISM_PASSWORD — credentials the server can POST to /api/v1/session to obtain preview/download tokens automatically
+   - PHOTO_PRISM_PREVIEW_TOKEN — short-lived preview token (if you already have one)
+   - PHOTO_PRISM_DOWNLOAD_TOKEN — (advanced) download token if used by your Photoprism instance
+   - TRANSLATE_API_URL / TRANSLATE_API_KEY — optional translation API to translate place names to English; if not present the server will transliterate place names
 
 2. Build and run with Docker Compose:
 
@@ -26,6 +32,7 @@ Development
 
 - Build Go binary locally: `go build -o image-mosaic ./cmd/api`
 - Run locally: `PHOTO_PRISM_BASE_URL=https://photoprism.example.com ./image-mosaic`
+- Windows: `go build -o out/image-mosaic.exe ./cmd/api` then run `out\image-mosaic.exe` (or use Docker)
 - Generate or refresh OpenAPI docs: this repo includes a minimal docs/swagger.json; to generate via swaggo, install swag (https://github.com/swaggo/swag) and run `swag init` in repo root (optional).
 
 Regenerate OpenAPI docs (swag)
@@ -56,6 +63,27 @@ The service exposes REST endpoints under `/api/*`. Key endpoints:
 - `GET /api/photo-count?category=<name>` — photo count for a category/album
 - `GET /api/featured?category=<name>` — single featured photo
 - `GET /api/debug` — diagnostic info
+
+Tiles JSON fields
+
+- Each tile object now contains `thumbUrl`, `mediumUrl`, and `fullUrl` so the frontend can request appropriately sized images. `albums` is an array of album titles when available.
+
+Image proxy and caching
+
+- `GET /api/proxy/photo?uid=<uid>&size=<size>` — server-side proxy that streams images from PhotoPrism using server-side auth. If a preview token and image hash are available the proxy will fetch the tokenized `/api/v1/t/{hash}/{token}/{size}` URL. Otherwise it falls back to `/api/v1/photos/{uid}/dl`.
+- The API sets conservative caching headers:
+  - Tiles JSON responses: `Cache-Control: public, max-age=30` and an `ETag` (sha1) to reduce repeated upstream queries while keeping freshness.
+  - Image responses: forwards upstream Cache-Control/ETag when present; otherwise sets `Cache-Control: public, max-age=86400, immutable` for tokenized thumbnails.
+
+Frontend behavior
+
+- The frontend uses infinite scroll and loads one page at a time. The gallery requests `limit=18` and `offset` increments as the user scrolls; network requests occur only when the user scrolls near the end of currently loaded photos.
+
+Translation and places
+
+- Country codes are expanded to full English names. Place names are transliterated and — if `TRANSLATE_API_URL` is configured — translated to English via the provided API.
+
+If you want these changes committed and pushed to a branch, run the usual `git add`/`git commit`/`git push` steps, or ask me to create a branch and open a PR.
 
 The OpenAPI UI is available at `/swagger/`.
 
