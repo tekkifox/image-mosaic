@@ -669,7 +669,51 @@ func main() {
 	port := getenv("PORT", "8080")
 	addr := ":" + port
 	log.Printf("Starting Go server on %s (serving ./public and /api/*)", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	log.Fatal(http.ListenAndServe(addr, securityHeaders(http.DefaultServeMux)))
+}
+
+// securityHeaders wraps next with the standard hardening response headers.
+// A relaxed policy is used for the bundled Swagger UI, which ships inline
+// scripts and styles.
+func securityHeaders(next http.Handler) http.Handler {
+	baseCSP := strings.Join([]string{
+		"default-src 'self'",
+		"base-uri 'self'",
+		"object-src 'none'",
+		"frame-ancestors 'none'",
+		"form-action 'self'",
+		"script-src 'self'",
+		"style-src 'self' 'unsafe-inline'",
+		"img-src 'self' data: blob: https:",
+		"font-src 'self' data:",
+		"connect-src 'self'",
+		"manifest-src 'self'",
+		"worker-src 'self' blob:",
+	}, "; ")
+
+	swaggerCSP := strings.Join([]string{
+		"default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:",
+		"base-uri 'self'",
+		"object-src 'none'",
+		"frame-ancestors 'none'",
+	}, "; ")
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		if strings.HasPrefix(r.URL.Path, "/swagger") {
+			h.Set("Content-Security-Policy", swaggerCSP)
+		} else {
+			h.Set("Content-Security-Policy", baseCSP)
+		}
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Permissions-Policy", "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()")
+		h.Set("Cross-Origin-Opener-Policy", "same-origin")
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+		h.Set("Strict-Transport-Security", "max-age=31536000")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // legacy apiHandler removed — REST endpoints implemented below
