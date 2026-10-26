@@ -11,30 +11,30 @@ fi
 
 echo "✓ Node.js found: $(node --version)"
 
-# Check if npm is installed
-if ! command -v npm &> /dev/null; then
-    echo "❌ npm is not installed."
+# Check if pnpm is installed
+if ! command -v pnpm &> /dev/null; then
+    echo "❌ pnpm is not installed. Enable it with: corepack enable pnpm"
     exit 1
 fi
 
-echo "✓ npm found: $(npm --version)"
+echo "✓ pnpm found: $(pnpm --version)"
 
 # Install dependencies
 echo ""
-echo "📦 Installing npm dependencies..."
-npm install
+echo "📦 Installing dependencies..."
+pnpm install
 
 # Build the assets
 echo ""
 echo "🔨 Building minified assets..."
-npm run build
+pnpm run build
 
 echo ""
 echo "✅ Setup complete!"
 echo ""
 echo "📋 Next steps:"
 echo "  1. Configure PhotoPrism credentials in .env"
-echo "  2. Run: npm run dev (for development with watch mode)"
-echo "  3. Or run: npm run build (for production build)"
+echo "  2. Run: pnpm run dev (for development with watch mode)"
+echo "  3. Or run: pnpm run build (for production build)"
 echo ""
 echo "📖 For more information, see BUILD.md"

@@ -21,7 +21,7 @@ fmt:
 ifeq ($(OS),Windows_NT)
     EMBED_CMD = powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\prepare_embed.ps1
 else
-    EMBED_CMD = sh -c 'if [ -d dist ]; then if [ -d public ]; then cp -a public/. dist/ || true; fi; mkdir -p $(PKG)/public; cp -a dist/. $(PKG)/public; echo "Copied dist -> $(PKG)/public"; elif [ -d public ]; then mkdir -p $(PKG)/public; cp -a public/. $(PKG)/public; echo "Copied public -> $(PKG)/public"; else echo "No dist or public directory found; run npm run build first"; fi'
+    EMBED_CMD = sh -c 'if [ -d dist ]; then if [ -d public ]; then cp -a public/. dist/ || true; fi; mkdir -p $(PKG)/public; cp -a dist/. $(PKG)/public; echo "Copied dist -> $(PKG)/public"; elif [ -d public ]; then mkdir -p $(PKG)/public; cp -a public/. $(PKG)/public; echo "Copied public -> $(PKG)/public"; else echo "No dist or public directory found; run pnpm run build first"; fi'
 endif
 
 ifeq ($(OS),Windows_NT)
@@ -38,7 +38,7 @@ build: deps npm-build embed
 	go build -o $(BINARY) $(PKG)
 
 npm-build:
-	@echo "Running frontend build (npm run build)..."
+	@echo "Running frontend build (pnpm run build)..."
 	@$(NPM_BUILD_CMD)
 
 run: build

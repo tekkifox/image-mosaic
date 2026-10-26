@@ -10,3 +10,4 @@ image-mosaic.exe
 cmd/api/public/*
 !cmd/api/public/.keep
 npm-debug.log
+package-lock.json

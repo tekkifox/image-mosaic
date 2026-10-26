@@ -33,7 +33,7 @@ if (Test-Path $distSrc) {
         Copy-Item -Path $src -Destination $publicDest -Recurse -Force
     }
 } else {
-    Write-Error "No dist or public directory found. Run npm run build or ensure public/ exists."
+    Write-Error "No dist or public directory found. Run pnpm run build or ensure public/ exists."
 }
 
 if (Test-Path $docsDest) {
