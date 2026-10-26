@@ -1,0 +1,10 @@
+{
+  "worktree": {
+    "setup": "pnpm install --frozen-lockfile --prefer-offline"
+  },
+  "metadataGeneration": {
+    "commitMessage": {
+      "instructions": "Use Conventional Commits with a scope"
+    }
+  }
+}
