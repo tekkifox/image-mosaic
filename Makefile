@@ -8,7 +8,7 @@ else
 BINARY := image-mosaic
 endif
 
-.PHONY: all build run embed clean fmt deps
+.PHONY: all build run embed clean fmt deps web-build
 
 all: build
 
@@ -25,7 +25,7 @@ else
 endif
 
 ifeq ($(OS),Windows_NT)
-    WEB_BUILD_CMD = powershell -NoProfile -ExecutionPolicy Bypass -Command "pnpm install --frozen-lockfile; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; pnpm run build"
+    WEB_BUILD_CMD = powershell -NoProfile -ExecutionPolicy Bypass -Command "pnpm install --frozen-lockfile; if ($$LASTEXITCODE -ne 0) { exit $$LASTEXITCODE }; pnpm run build"
 else
     WEB_BUILD_CMD = sh -c 'pnpm install --frozen-lockfile && pnpm run build'
 endif
