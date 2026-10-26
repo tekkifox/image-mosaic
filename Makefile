@@ -25,21 +25,21 @@ else
 endif
 
 ifeq ($(OS),Windows_NT)
-    NPM_BUILD_CMD = powershell -NoProfile -ExecutionPolicy Bypass -Command "if (Test-Path 'package-lock.json') { npm ci } else { npm install }; npm run build"
+    WEB_BUILD_CMD = powershell -NoProfile -ExecutionPolicy Bypass -Command "pnpm install --frozen-lockfile; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; pnpm run build"
 else
-    NPM_BUILD_CMD = sh -c 'if [ -f package-lock.json ]; then npm ci; else npm install; fi; npm run build'
+    WEB_BUILD_CMD = sh -c 'pnpm install --frozen-lockfile && pnpm run build'
 endif
 
 embed:
 	@echo "Preparing embedded assets..."
 	@$(EMBED_CMD)
 
-build: deps npm-build embed
+build: deps web-build embed
 	go build -o $(BINARY) $(PKG)
 
-npm-build:
+web-build:
 	@echo "Running frontend build (pnpm run build)..."
-	@$(NPM_BUILD_CMD)
+	@$(WEB_BUILD_CMD)
 
 run: build
 ifeq ($(OS),Windows_NT)
