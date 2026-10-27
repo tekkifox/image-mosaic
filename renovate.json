@@ -1,6 +1,56 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
+  "timezone": "Europe/London",
+  "dependencyDashboard": true,
+  "semanticCommits": "enabled",
+  "rangeStrategy": "bump",
+  "rebaseWhen": "conflicted",
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
+  "labels": ["dependencies"],
+  "automerge": false,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": false
+  },
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security", "dependencies"],
+    "schedule": ["at any time"]
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["gomod"],
+      "groupName": "Go dependencies",
+      "separateMajorMinor": false,
+      "automerge": false
+    },
+    {
+      "matchManagers": ["npm"],
+      "groupName": "Node dependencies",
+      "separateMajorMinor": false,
+      "automerge": false
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["packageManager"],
+      "matchPackageNames": ["pnpm"],
+      "groupName": "pnpm package manager",
+      "separateMajorMinor": false,
+      "automerge": false,
+      "labels": ["dependencies", "toolchain"]
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "groupName": "Docker base images",
+      "separateMajorMinor": false,
+      "automerge": false,
+      "labels": ["dependencies", "toolchain"]
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major"]
+    }
   ]
 }
