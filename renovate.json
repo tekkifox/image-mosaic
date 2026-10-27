@@ -43,6 +43,13 @@
       "labels": ["dependencies", "toolchain"]
     },
     {
+      "description": "Hold engines.node: Vercel only offers Node 24.x, so Renovate raising it (for example to >=26) silently blocks deployments while CI stays green. Change this range deliberately.",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["engines"],
+      "matchPackageNames": ["node"],
+      "enabled": false
+    },
+    {
       "matchManagers": ["dockerfile"],
       "groupName": "Docker base images",
       "separateMajorMinor": false,
