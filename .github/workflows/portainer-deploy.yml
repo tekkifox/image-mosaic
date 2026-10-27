@@ -24,8 +24,8 @@ jobs:
       - name: Install frontend deps & build
         run: |
           corepack enable pnpm
-          pnpm i --frozen-lockfile
-          pnpm run build
+          corepack pnpm@12.15.0 install --frozen-lockfile
+          corepack pnpm@12.15.0 run build
 
       - name: Set up Go
         uses: actions/setup-go@v4

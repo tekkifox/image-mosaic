@@ -1,0 +1,9 @@
+# pnpm 12 reads dependency-resolution and supply-chain settings only from this
+# file; .npmrc is limited to auth, registry, TLS, proxy and local-address.
+#
+# `minimumReleaseAge` is pnpm 12's cooling-off window, in minutes, before a
+# published version may be installed. 720 (12h) matches the policy used by the
+# sibling rossmoney_me repository: it keeps a real cooling-off period against
+# freshly hijacked or typo-squatted releases, while still allowing reviewed
+# same-day releases to be installed. Releases younger than 12h are refused.
+minimumReleaseAge: 720
