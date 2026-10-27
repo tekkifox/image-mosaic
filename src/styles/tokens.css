@@ -98,7 +98,6 @@
   --space-1-25: 1.25rem;
   --space-1-5: 1.5rem;
   --space-2: 2rem;
-  --space-2-5: 2.5rem;
   --space-3: 3rem;
 
   /* ---------------------------------------------------------------------
@@ -107,7 +106,6 @@
    * no value changed. Layout maxima and component dimensions live here too.
    * ------------------------------------------------------------------ */
   --size-2: 2px;
-  --size-3: 3px;
   --size-4: 4px;
   --size-5: 5px;
   --size-6: 6px;
@@ -135,7 +133,6 @@
   --size-300: 300px;
   --size-400: 400px;
   --size-600: 600px;
-  --size-700: 700px;
   --size-800: 800px;
   --size-1200: 1200px;
   --size-1400: 1400px;
@@ -145,7 +142,6 @@
    * ------------------------------------------------------------------ */
   --border-width-hairline: 1px;
   --border-width-accent: 2px;
-  --border-width-heavy: 4px;
 
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -169,7 +165,6 @@
    * Typography
    * ------------------------------------------------------------------ */
   --font-family-base: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  --font-weight-semibold: 600;
   --font-weight-bold: 700;
 
   --font-size-display: 3.5rem;
@@ -197,7 +192,6 @@
    * Motion
    * ------------------------------------------------------------------ */
   --transition-colour: color 0.3s ease;
-  --transition-arrow: transform 0.2s ease;
   --transition-tile: transform 0.15s ease, box-shadow 0.15s ease;
   --transition-tile-scattered: transform 0.2s ease, box-shadow 0.2s ease;
   --transition-control: background 0.2s ease;
