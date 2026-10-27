@@ -33,7 +33,7 @@ COPY docs ./cmd/api/docs
 RUN go build -o /out/image-mosaic ./cmd/api
 
 ### Final runtime image
-FROM alpine:3.18
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=go-builder /out/image-mosaic /app/image-mosaic
