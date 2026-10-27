@@ -1,7 +1,7 @@
 ### Multi-stage build: build frontend assets (node) and Go binary, then produce minimal runtime image
 
 ### Frontend builder
-FROM node:18-alpine AS node-builder
+FROM node:26-alpine AS node-builder
 WORKDIR /src
 # Pin corepack from npm: the corepack bundled with node:18-alpine resolves
 # pnpm through the old bin/pnpm.cjs path, which pnpm 12 no longer ships.
