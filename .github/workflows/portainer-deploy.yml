@@ -21,9 +21,15 @@ jobs:
         with:
           node-version: '18.20.8'
 
+      # Pin corepack from npm: the corepack bundled with the runner's Node
+      # resolves pnpm through the old bin/pnpm.cjs path, which pnpm 12 no
+      # longer ships. 0.36.0 includes the pnpm 11+ native-bin fix (#776) and
+      # is the version the sibling rossmoney_me repository pins.
+      - name: Enable Corepack
+        run: npm i -g corepack@0.36.0 && corepack enable
+
       - name: Install frontend deps & build
         run: |
-          corepack enable pnpm
           corepack pnpm@12.15.0 install --frozen-lockfile
           corepack pnpm@12.15.0 run build
 

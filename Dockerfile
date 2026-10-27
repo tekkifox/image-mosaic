@@ -3,10 +3,15 @@
 ### Frontend builder
 FROM node:18-alpine AS node-builder
 WORKDIR /src
+# Pin corepack from npm: the corepack bundled with node:18-alpine resolves
+# pnpm through the old bin/pnpm.cjs path, which pnpm 12 no longer ships.
+# 0.36.0 includes the pnpm 11+ native-bin fix (#776). Installing it once here
+# covers both former `corepack enable pnpm` calls below.
+RUN npm i -g corepack@0.36.0 && corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN corepack enable pnpm && corepack pnpm@12.15.0 install --frozen-lockfile
+RUN corepack pnpm@12.15.0 install --frozen-lockfile
 COPY . .
-RUN corepack enable pnpm && corepack pnpm@12.15.0 run build
+RUN corepack pnpm@12.15.0 run build
     # After building, copy repository public/ (index and images) into dist/ so
     # the distribution directory contains index.html and images for embedding.
     RUN if [ -d public ]; then cp -a public/. dist/ || true; fi
