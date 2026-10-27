@@ -3,10 +3,10 @@
 ### Frontend builder
 FROM node:18-alpine AS node-builder
 WORKDIR /src
-COPY package.json pnpm-lock.yaml ./
-RUN corepack enable pnpm && pnpm i --frozen-lockfile
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack enable pnpm && corepack pnpm@12.15.0 install --frozen-lockfile
 COPY . .
-RUN corepack enable pnpm && pnpm run build
+RUN corepack enable pnpm && corepack pnpm@12.15.0 run build
     # After building, copy repository public/ (index and images) into dist/ so
     # the distribution directory contains index.html and images for embedding.
     RUN if [ -d public ]; then cp -a public/. dist/ || true; fi
