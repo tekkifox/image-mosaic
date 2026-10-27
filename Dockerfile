@@ -17,7 +17,7 @@ RUN corepack pnpm@12.15.0 run build
     RUN if [ -d public ]; then cp -a public/. dist/ || true; fi
 
 ### Go builder
-FROM golang:1.26-alpine AS go-builder
+FROM golang:1.27-alpine AS go-builder
 WORKDIR /src
 COPY cmd ./cmd
 COPY go.mod go.sum ./
