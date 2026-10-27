@@ -18,23 +18,23 @@
   "license": "MIT",
   "packageManager": "pnpm@12.15.0",
   "engines": {
-    "node": ">=26"
+    "node": ">=26.12.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.22.0",
-    "@babel/preset-env": "^7.22.0",
-    "@babel/preset-react": "^7.22.0",
-    "babel-loader": "^9.1.2",
-    "css-loader": "^6.8.1",
-    "css-minimizer-webpack-plugin": "^5.0.1",
-    "cssnano": "^6.0.1",
-    "mini-css-extract-plugin": "^2.7.6",
-    "terser-webpack-plugin": "^5.3.9",
-    "webpack": "^5.88.0",
-    "webpack-cli": "^5.1.4"
+    "@babel/core": "^8.0.9",
+    "@babel/preset-env": "^8.0.7",
+    "@babel/preset-react": "^8.0.1",
+    "babel-loader": "^10.1.1",
+    "css-loader": "^7.1.5",
+    "css-minimizer-webpack-plugin": "^8.0.0",
+    "cssnano": "^9.9.0",
+    "mini-css-extract-plugin": "^2.10.2",
+    "terser-webpack-plugin": "^5.6.1",
+    "webpack": "^5.112.2",
+    "webpack-cli": "^7.2.3"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }
