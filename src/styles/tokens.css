@@ -1,0 +1,221 @@
+/*
+ * Design tokens for image-mosaic.
+ *
+ * This file is the single source of truth for the visual language. Component
+ * styles consume these variables; they must not contain raw colours, rgb()/
+ * hsl() functions or fixed px values. See DESIGN.md for the palette and scales,
+ * and AGENTS.md for the review rules.
+ *
+ * The values below are locked to the pre-token stylesheet. Changing one is a
+ * visual change and needs its own reviewed diff.
+ */
+
+:root {
+  /* ---------------------------------------------------------------------
+   * Colour — page backgrounds
+   * ------------------------------------------------------------------ */
+  --colour-bg-base: #0a0e27;
+  --colour-bg-base-end: #1a1a2e;
+  --colour-bg-chrome: rgba(15, 15, 35, 0.95);
+  --colour-bg-footer: rgba(15, 15, 35, 0.8);
+  --colour-bg-hero-start: #1a237e;
+  --colour-bg-hero-end: #283593;
+
+  /* ---------------------------------------------------------------------
+   * Colour — surfaces
+   * ------------------------------------------------------------------ */
+  --colour-surface-raised: rgba(255, 255, 255, 0.04);
+  --colour-surface-sunken: rgba(255, 255, 255, 0.02);
+  --colour-surface-stat: rgba(255, 255, 255, 0.05);
+  --colour-surface-base: #222222;
+  --colour-surface-inset: #333333;
+  --colour-surface-contrast: #ffffff;
+
+  /* ---------------------------------------------------------------------
+   * Colour — text
+   * ------------------------------------------------------------------ */
+  --colour-text-primary: #e0e0e0;
+  --colour-text-secondary: #b0bec5;
+  --colour-text-muted: #90caf9;
+  --colour-text-body: #cfd8dc;
+  --colour-text-strong: #ffffff;
+  --colour-text-soft: #eeeeee;
+  --colour-text-dim: #cccccc;
+  --colour-text-faint: #bbbbbb;
+
+  /* ---------------------------------------------------------------------
+   * Colour — accents
+   * ------------------------------------------------------------------ */
+  --colour-accent-primary: #64b5f6;
+  --colour-accent-secondary: #81c784;
+  --colour-accent-wash: rgba(100, 181, 246, 0.08);
+  --colour-accent-tint: rgba(100, 181, 246, 0.1);
+  --colour-accent-border: rgba(100, 181, 246, 0.2);
+  --colour-accent-border-strong: rgba(100, 181, 246, 0.3);
+
+  /* ---------------------------------------------------------------------
+   * Colour — borders and translucent fills
+   * ------------------------------------------------------------------ */
+  --colour-border-subtle: rgba(255, 255, 255, 0.1);
+  --colour-border-strong: #444444;
+  --colour-border-contrast: rgba(255, 255, 255, 0.25);
+  --colour-fill-contrast: rgba(255, 255, 255, 0.15);
+
+  /* ---------------------------------------------------------------------
+   * Colour — overlays, scrims and shadow tints
+   * ------------------------------------------------------------------ */
+  --colour-overlay-scrim: rgba(0, 0, 0, 0.85);
+  --colour-overlay-panel: rgba(0, 0, 0, 0.5);
+  --colour-overlay-panel-strong: rgba(0, 0, 0, 0.6);
+  --colour-overlay-panel-soft: rgba(0, 0, 0, 0.4);
+  --colour-shadow-soft: rgba(0, 0, 0, 0.2);
+  --colour-shadow-tile: rgba(0, 0, 0, 0.35);
+  --colour-shadow-image: rgba(0, 0, 0, 0.5);
+  --colour-shadow-overlay: rgba(0, 0, 0, 0.6);
+
+  /* ---------------------------------------------------------------------
+   * Colour — decorative sheen
+   * The hero grid stroke is embedded in a data-URI SVG and cannot consume a
+   * custom property; it stays literal inside that url() and is exempt in the
+   * token guard. Its value is rgba(255, 255, 255, 0.03).
+   * ------------------------------------------------------------------ */
+  --colour-sheen-highlight: rgba(255, 255, 255, 0.05);
+  --colour-sheen-shadow: rgba(0, 0, 0, 0.02);
+
+  /* ---------------------------------------------------------------------
+   * Spacing — rem ladder, used for text-relative rhythm.
+   * Values are the exact steps the layout already used; they are not a
+   * rounded 4/8 point grid. Add a step only with a design review.
+   * ------------------------------------------------------------------ */
+  --space-0-25: 0.25rem;
+  --space-0-4: 0.4rem;
+  --space-0-5: 0.5rem;
+  --space-0-65: 0.65rem;
+  --space-0-75: 0.75rem;
+  --space-0-85: 0.85rem;
+  --space-1: 1rem;
+  --space-1-1: 1.1rem;
+  --space-1-25: 1.25rem;
+  --space-1-5: 1.5rem;
+  --space-2: 2rem;
+  --space-3: 3rem;
+
+  /* ---------------------------------------------------------------------
+   * Fixed sizes — px scale.
+   * The token name is the pixel value, so a review can see at a glance that
+   * no value changed. Layout maxima and component dimensions live here too.
+   * ------------------------------------------------------------------ */
+  --size-2: 2px;
+  --size-4: 4px;
+  --size-5: 5px;
+  --size-6: 6px;
+  --size-8: 8px;
+  --size-10: 10px;
+  --size-12: 12px;
+  --size-15: 15px;
+  --size-16: 16px;
+  --size-18: 18px;
+  --size-20: 20px;
+  --size-24: 24px;
+  --size-28: 28px;
+  --size-30: 30px;
+  --size-35: 35px;
+  --size-40: 40px;
+  --size-48: 48px;
+  --size-60: 60px;
+  --size-80: 80px;
+  --size-100: 100px;
+  --size-120: 120px;
+  --size-150: 150px;
+  --size-180: 180px;
+  --size-240: 240px;
+  --size-280: 280px;
+  --size-300: 300px;
+  --size-400: 400px;
+  --size-600: 600px;
+  --size-800: 800px;
+  --size-1200: 1200px;
+  --size-1400: 1400px;
+
+  /* ---------------------------------------------------------------------
+   * Borders and radii
+   * ------------------------------------------------------------------ */
+  --border-width-hairline: 1px;
+  --border-width-accent: 2px;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-pill: 999px;
+  --radius-circle: 50%;
+
+  /* ---------------------------------------------------------------------
+   * Shadows
+   * ------------------------------------------------------------------ */
+  --shadow-card: 0 var(--size-18) var(--size-40) var(--colour-shadow-soft);
+  --shadow-image: 0 var(--size-20) var(--size-40) var(--colour-shadow-image);
+  --shadow-tile-hover: 0 var(--size-16) var(--size-35) var(--colour-shadow-tile);
+  --shadow-overlay-image: 0 var(--size-10) var(--size-30) var(--colour-shadow-overlay);
+  --shadow-caption: 0 var(--size-6) var(--size-18) var(--colour-shadow-image);
+
+  /* ---------------------------------------------------------------------
+   * Typography
+   * ------------------------------------------------------------------ */
+  --font-family-base: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --font-weight-bold: 700;
+
+  --font-size-display: 3.5rem;
+  --font-size-display-mobile: 2rem;
+  --font-size-heading: 2.5rem;
+  --font-size-heading-mobile: 1.8rem;
+  --font-size-stat: 2rem;
+  --font-size-lead: 1.3rem;
+  --font-size-small: 0.95rem;
+  --font-size-label: 0.9rem;
+  --font-size-bullet: 1.1rem;
+  --font-size-control: 14px;
+  --font-size-caption: 13px;
+  --font-size-pill: 12px;
+  --font-size-icon: 24px;
+  --font-size-info-heading: 1.5em;
+  --font-size-info-body: 0.9em;
+
+  --line-height-base: 1.6;
+  --line-height-description: 1.8;
+  --line-height-caption: 1.4;
+  --line-height-flat: 1;
+
+  /* ---------------------------------------------------------------------
+   * Motion
+   * ------------------------------------------------------------------ */
+  --transition-colour: color 0.3s ease;
+  --transition-tile: transform 0.15s ease, box-shadow 0.15s ease;
+  --transition-tile-scattered: transform 0.2s ease, box-shadow 0.2s ease;
+  --transition-control: background 0.2s ease;
+  --transition-fade: opacity 0.2s ease;
+  --animation-skeleton: skeleton-loading 1.5s infinite;
+
+  /* ---------------------------------------------------------------------
+   * Blur and stacking
+   * ------------------------------------------------------------------ */
+  --blur-chrome: 10px;
+  --blur-caption: 4px;
+
+  --z-raised: 1;
+  --z-tile-sheen: 2;
+  --z-caption: 3;
+  --z-tile-control: 10;
+  --z-nav: 100;
+  --z-lightbox-control: 1000;
+  --z-lightbox-close: 1001;
+  --z-lightbox: 9999;
+
+  /* ---------------------------------------------------------------------
+   * Breakpoints
+   * Custom properties cannot be used in @media preludes; the tablet
+   * breakpoint is 768px and is exempt in the token guard.
+   * ------------------------------------------------------------------ */
+}
