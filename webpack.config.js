@@ -56,6 +56,25 @@ module.exports = {
     new MiniCssExtractPlugin({
       filename: '[name].min.css',
     }),
+    // Copy the static site (index.html, images, styles.css, gallery.js) into
+    // dist/. webpack's `output.clean` empties dist/ and only the compiled
+    // bundles are emitted, so without this step the distribution is missing
+    // everything that lives in public/.
+    {
+      apply: (compiler) => {
+        compiler.hooks.afterEmit.tap('CopyPublicDir', () => {
+          const src = path.join(__dirname, 'public');
+          const dest = path.join(__dirname, 'dist');
+
+          if (!fs.existsSync(src)) {
+            return;
+          }
+
+          fs.cpSync(src, dest, { recursive: true, force: true });
+          console.log('Public assets copied to dist/');
+        });
+      }
+    },
     // Copy service worker to dist folder
     {
       apply: (compiler) => {
