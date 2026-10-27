@@ -50,6 +50,14 @@
       "labels": ["dependencies", "toolchain"]
     },
     {
+      "matchManagers": ["gomod", "dockerfile", "github-actions"],
+      "matchPackageNames": ["go", "golang", "actions/setup-go", "actions/go-versions"],
+      "groupName": "Go toolchain",
+      "separateMajorMinor": false,
+      "automerge": false,
+      "labels": ["dependencies", "toolchain"]
+    },
+    {
       "matchUpdateTypes": ["major"],
       "automerge": false,
       "labels": ["dependencies", "major"]
