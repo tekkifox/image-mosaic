@@ -19,12 +19,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '18.20.8'
+          node-version: '26.12.1'
 
-      # Pin corepack from npm: the corepack bundled with the runner's Node
-      # resolves pnpm through the old bin/pnpm.cjs path, which pnpm 12 no
-      # longer ships. 0.36.0 includes the pnpm 11+ native-bin fix (#776) and
-      # is the version the sibling rossmoney_me repository pins.
+      # Node 26 no longer bundles corepack, so install it explicitly. Pinning
+      # 0.36.0 from npm also avoids older corepack resolving pnpm through the
+      # old bin/pnpm.cjs path, which pnpm 12 no longer ships. 0.36.0 includes
+      # the pnpm 11+ native-bin fix (#776) and is the version the sibling
+      # rossmoney_me repository pins.
       - name: Enable Corepack
         run: npm i -g corepack@0.36.0 && corepack enable
 
