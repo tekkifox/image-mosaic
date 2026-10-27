@@ -26,7 +26,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-//go:embed public/** docs/**
+//go:embed all:public all:docs
 var embeddedFiles embed.FS
 
 // computeCountryPlaces aggregates photos by country and place names.

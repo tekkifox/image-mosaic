@@ -6,7 +6,12 @@
   "scripts": {
     "build": "webpack --mode production",
     "dev": "webpack --mode development --watch",
-    "watch": "webpack --mode development --watch"
+    "watch": "webpack --mode development --watch",
+    "test": "pnpm run test:unit && pnpm run test:go && pnpm run test:e2e",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:go": "go test ./...",
+    "test:e2e": "pnpm run build && playwright test"
   },
   "keywords": [
     "photography",
@@ -24,12 +29,17 @@
     "@babel/core": "^8.0.9",
     "@babel/preset-env": "^8.0.7",
     "@babel/preset-react": "^8.0.1",
+    "@playwright/test": "^1.64.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "babel-loader": "^10.1.1",
     "css-loader": "^7.1.5",
     "css-minimizer-webpack-plugin": "^8.0.0",
     "cssnano": "^9.9.0",
+    "jsdom": "^30.1.3",
     "mini-css-extract-plugin": "^2.10.2",
     "terser-webpack-plugin": "^5.6.1",
+    "vitest": "^5.0.5",
     "webpack": "^5.112.2",
     "webpack-cli": "^7.2.3"
   },

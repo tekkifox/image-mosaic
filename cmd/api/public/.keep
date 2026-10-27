@@ -1,0 +1,2 @@
+# Keeps cmd/api/public present on a clean checkout so //go:embed can compile.
+# The real build copies dist/ here (see Makefile and Dockerfile).

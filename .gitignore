@@ -2,6 +2,9 @@
 cache
 node_modules/
 dist/
+.e2e/
+test-results/
+playwright-report/
 *.exe
 image-mosaic
 image-mosaic.exe
