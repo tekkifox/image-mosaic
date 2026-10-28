@@ -1,7 +1,7 @@
 ### Multi-stage build: build frontend assets (node) and Go binary, then produce minimal runtime image
 
 ### Frontend builder
-FROM node:26-alpine AS node-builder
+FROM --platform=$BUILDPLATFORM node:26-alpine AS node-builder
 WORKDIR /src
 # Pin corepack from npm: the corepack bundled with node:18-alpine resolves
 # pnpm through the old bin/pnpm.cjs path, which pnpm 12 no longer ships.
@@ -17,7 +17,8 @@ RUN corepack pnpm@12.15.0 run build
     RUN if [ -d public ]; then cp -a public/. dist/ || true; fi
 
 ### Go builder
-FROM golang:1.27-alpine AS go-builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS go-builder
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY cmd ./cmd
 COPY go.mod go.sum ./
@@ -35,7 +36,9 @@ COPY public ./cmd/api/public
 COPY --from=node-builder /src/dist ./cmd/api/public
 # Also ensure generated docs are available for embed
 COPY docs ./cmd/api/docs
-RUN go build -o /out/image-mosaic ./cmd/api
+# Build for the target platform, not the host: $BUILDPLATFORM keeps this stage
+# native (fast), and CGO_ENABLED=0 yields a static binary that runs on any arch.
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/image-mosaic ./cmd/api
 
 ### Final runtime image
 FROM alpine:3.24
