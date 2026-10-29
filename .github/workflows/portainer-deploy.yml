@@ -19,7 +19,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '26.12.1'
+          node-version: '26.13.0'
 
       # Node 26 no longer bundles corepack, so install it explicitly. Pinning
       # 0.36.0 from npm also avoids older corepack resolving pnpm through the
