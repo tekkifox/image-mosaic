@@ -9,9 +9,9 @@ WORKDIR /src
 # covers both former `corepack enable pnpm` calls below.
 RUN npm i -g corepack@0.36.0 && corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN corepack pnpm@12.15.0 install --frozen-lockfile
+RUN corepack pnpm install --frozen-lockfile
 COPY . .
-RUN corepack pnpm@12.15.0 run build
+RUN corepack pnpm run build
     # After building, copy repository public/ (index and images) into dist/ so
     # the distribution directory contains index.html and images for embedding.
     RUN if [ -d public ]; then cp -a public/. dist/ || true; fi
