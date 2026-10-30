@@ -10,7 +10,8 @@ permissions:
   packages: write
 
 jobs:
-  build-and-publish:
+  # amd64 image, built natively on the standard GitHub-hosted x86 runner.
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -49,23 +50,146 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Push by digest only. The merge job assembles the multi-arch manifest
+      # from the two per-architecture digests.
+      - name: Build and push amd64 image by digest
+        id: build
+        uses: docker/build-push-action@v7
         with:
-          platforms: arm64
+          context: .
+          platforms: linux/amd64
+          outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,mode=max,scope=amd64
+
+      - name: Record amd64 digest
+        run: |
+          digest="${{ steps.build.outputs.digest }}"
+          if [ -z "$digest" ]; then
+            echo "No digest produced by the amd64 build" >&2
+            exit 1
+          fi
+          printf '%s\n' "$digest" > "${RUNNER_TEMP}/digest"
+
+      - name: Upload amd64 digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-amd64
+          path: ${{ runner.temp }}/digest
+          if-no-files-found: error
+          retention-days: 1
+
+  # arm64 image, built natively on the GitHub-hosted ARM runner. No QEMU.
+  build-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '26.13.0'
+
+      # Node 26 no longer bundles corepack, so install it explicitly. Pinning
+      # 0.36.0 from npm also avoids older corepack resolving pnpm through the
+      # old bin/pnpm.cjs path, which pnpm 12 no longer ships. 0.36.0 includes
+      # the pnpm 11+ native-bin fix (#776) and is the version the sibling
+      # rossmoney_me repository pins.
+      - name: Enable Corepack
+        run: npm i -g corepack@0.36.0 && corepack enable
+
+      - name: Install frontend deps & build
+        run: |
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm run build
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.3'
+
+      - name: Go mod download
+        run: go mod download
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build and push image
+      - name: Build and push arm64 image by digest
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          platforms: linux/arm64
+          outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
+
+      - name: Record arm64 digest
+        run: |
+          digest="${{ steps.build.outputs.digest }}"
+          if [ -z "$digest" ]; then
+            echo "No digest produced by the arm64 build" >&2
+            exit 1
+          fi
+          printf '%s\n' "$digest" > "${RUNNER_TEMP}/digest"
+
+      - name: Upload arm64 digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-arm64
+          path: ${{ runner.temp }}/digest
+          if-no-files-found: error
+          retention-days: 1
+
+  # Publish the multi-arch manifest from both digests, then trigger the deploy.
+  # This is the only place the Portainer webhook fires, and it runs only after
+  # the manifest has been pushed.
+  merge:
+    runs-on: ubuntu-latest
+    needs: [build, build-arm64]
+    steps:
+      - name: Download amd64 digest
+        uses: actions/download-artifact@v4
+        with:
+          name: digest-amd64
+          path: ${{ runner.temp }}/digests/amd64
+
+      - name: Download arm64 digest
+        uses: actions/download-artifact@v4
+        with:
+          name: digest-arm64
+          path: ${{ runner.temp }}/digests/arm64
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Publish multi-arch manifest
+        run: |
+          amd64="$(cat "${RUNNER_TEMP}/digests/amd64/digest")"
+          arm64="$(cat "${RUNNER_TEMP}/digests/arm64/digest")"
+          docker buildx imagetools create \
+            --tag "ghcr.io/${GITHUB_REPOSITORY}:latest" \
+            --tag "ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_SHA}" \
+            "ghcr.io/${GITHUB_REPOSITORY}@${amd64}" \
+            "ghcr.io/${GITHUB_REPOSITORY}@${arm64}"
 
       - name: Trigger Portainer stack webhook (if configured)
         env:
