@@ -6,7 +6,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	httpSwagger "github.com/swaggo/http-swagger"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 	docs "github.com/tekkifox/image-mosaic/docs"
 	"io"
 	"io/fs"
