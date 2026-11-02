@@ -209,9 +209,9 @@ jobs:
           #    variables the running container needs, so this read is mandatory.
           get_status=$(curl -sS -o "$tmpdir/get.json" -w "%{http_code}" \
             -H "X-API-Key: ${PORTAINER_API_KEY}" \
-            "${PORTAINER_URL}/api/stacks/6")
+            "${PORTAINER_URL}/api/stacks/43")
           if [ "$get_status" -lt 200 ] || [ "$get_status" -ge 300 ]; then
-            echo "GET /api/stacks/6 failed with status $get_status" >&2
+            echo "GET /api/stacks/43 failed with status $get_status" >&2
             cat "$tmpdir/get.json" >&2
             exit 1
           fi
@@ -229,9 +229,9 @@ jobs:
             -H "X-API-Key: ${PORTAINER_API_KEY}" \
             -H "Content-Type: application/json" \
             --data-binary "@$tmpdir/body.json" \
-            "${PORTAINER_URL}/api/stacks/6?endpointId=3")
+            "${PORTAINER_URL}/api/stacks/43?endpointId=9")
           if [ "$put_status" -lt 200 ] || [ "$put_status" -ge 300 ]; then
-            echo "PUT /api/stacks/6?endpointId=3 failed with status $put_status" >&2
+            echo "PUT /api/stacks/43?endpointId=9 failed with status $put_status" >&2
             cat "$tmpdir/put.json" >&2
             exit 1
           fi
