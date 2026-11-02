@@ -90,4 +90,4 @@ The OpenAPI UI is available at `/swagger/`.
 
 Portainer deployment
 
-Use the `PORTAINER_WEBHOOK_URL` repository secret to enable automatic redeploys on push to `main`. The `portainer-deploy.yml` workflow will trigger that webhook after publishing a new GHCR image.
+The `portainer-deploy.yml` workflow deploys to Portainer through the Portainer API after publishing a new GHCR image. `docker-compose.deploy.yml` is the compose Portainer runs (pulls `ghcr.io/tekkifox/image-mosaic:latest`, container `travelling`, on the proxy network, configured via `env_file: stack.env`); `docker-compose.yml` is for local development only (it builds from the local Dockerfile and exposes port 8080).
