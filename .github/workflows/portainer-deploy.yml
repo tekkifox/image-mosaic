@@ -75,7 +75,7 @@ jobs:
           printf '%s\n' "$digest" > "${RUNNER_TEMP}/digest"
 
       - name: Upload amd64 digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digest-amd64
           path: ${{ runner.temp }}/digest
@@ -145,7 +145,7 @@ jobs:
           printf '%s\n' "$digest" > "${RUNNER_TEMP}/digest"
 
       - name: Upload arm64 digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digest-arm64
           path: ${{ runner.temp }}/digest
