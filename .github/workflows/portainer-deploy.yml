@@ -202,6 +202,17 @@ jobs:
         run: |
           set -euo pipefail
 
+          # 0. Guard against image drift. Portainer reports success even when the
+          #    stack references a tag this run never published, so fail loudly if
+          #    the deploy compose does not point at the image built above.
+          published_image="ghcr.io/${GITHUB_REPOSITORY}:latest"
+          compose_image=$(sed -n 's/^[[:space:]]*image:[[:space:]]*//p' docker-compose.deploy.yml \
+            | head -n 1 | tr -d "[:space:]\"'")
+          if [ "$compose_image" != "$published_image" ]; then
+            echo "docker-compose.deploy.yml must reference ${published_image}, found '${compose_image:-<none>}'" >&2
+            exit 1
+          fi
+
           tmpdir="${RUNNER_TEMP}/portainer"
           mkdir -p "$tmpdir"
 
