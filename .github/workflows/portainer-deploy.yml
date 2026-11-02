@@ -191,13 +191,48 @@ jobs:
             "ghcr.io/${GITHUB_REPOSITORY}@${amd64}" \
             "ghcr.io/${GITHUB_REPOSITORY}@${arm64}"
 
-      - name: Trigger Portainer stack webhook (if configured)
+      - name: Checkout for deploy compose
+        uses: actions/checkout@v7
+
+      - name: Deploy stack to Portainer via API
+        if: github.ref == 'refs/heads/main'
         env:
-          PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
         run: |
-          if [ -n "$PORTAINER_WEBHOOK_URL" ]; then
-            echo "Triggering Portainer webhook"
-            curl -X POST -fsS -o /dev/null -w "%{http_code}\n" "$PORTAINER_WEBHOOK_URL"
-          else
-            echo "No PORTAINER_WEBHOOK_URL secret configured. Skipping Portainer trigger."
+          set -euo pipefail
+
+          tmpdir="${RUNNER_TEMP}/portainer"
+          mkdir -p "$tmpdir"
+
+          # 1. Read the current stack Env array. Sending an empty Env wipes the
+          #    variables the running container needs, so this read is mandatory.
+          get_status=$(curl -sS -o "$tmpdir/get.json" -w "%{http_code}" \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            "${PORTAINER_URL}/api/stacks/6")
+          if [ "$get_status" -lt 200 ] || [ "$get_status" -ge 300 ]; then
+            echo "GET /api/stacks/6 failed with status $get_status" >&2
+            cat "$tmpdir/get.json" >&2
+            exit 1
           fi
+          env_json=$(jq -c '.Env // []' "$tmpdir/get.json")
+
+          # 2. Build the deploy body and PUT it.
+          jq -n \
+            --rawfile compose docker-compose.deploy.yml \
+            --argjson env "$env_json" \
+            '{StackFileContent: $compose, Env: $env, PullImage: true}' \
+            > "$tmpdir/body.json"
+
+          put_status=$(curl -sS -o "$tmpdir/put.json" -w "%{http_code}" \
+            -X PUT \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            --data-binary "@$tmpdir/body.json" \
+            "${PORTAINER_URL}/api/stacks/6?endpointId=3")
+          if [ "$put_status" -lt 200 ] || [ "$put_status" -ge 300 ]; then
+            echo "PUT /api/stacks/6?endpointId=3 failed with status $put_status" >&2
+            cat "$tmpdir/put.json" >&2
+            exit 1
+          fi
+          echo "Portainer deploy succeeded (HTTP $put_status)"
