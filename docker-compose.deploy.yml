@@ -1,6 +1,6 @@
 services:
   image-mosaic:
-    image: ghcr.io/tekkifox/image-mosaic:latest
+    image: ghcr.io/tekkifox/travelling-site:latest
     container_name: travelling
     hostname: travelling
     ports:
