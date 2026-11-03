@@ -157,7 +157,7 @@ jobs:
   # This is the only place the Portainer webhook fires, and it runs only after
   # the manifest has been pushed. It runs on the self-hosted runner so it can
   # reach the storage hub through its TLS front door (PORTAINER_URL, e.g.
-  # https://100.120.32.67:8444).
+  # https://portainer.example.com).
   merge:
     runs-on: [self-hosted, paseo]
     needs: [build, build-arm64]
@@ -202,6 +202,7 @@ jobs:
         env:
           PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          PORTAINER_STACK_NAME: photos-travelling-site
         run: |
           set -euo pipefail
 
@@ -219,33 +220,72 @@ jobs:
           tmpdir="${RUNNER_TEMP}/portainer"
           mkdir -p "$tmpdir"
 
-          # 1. Read the current stack Env array. Sending an empty Env wipes the
+          # 1. Resolve the stack by name. Stack ids and endpoint ids are facts
+          #    Portainer already knows; pinning them here is what let the deploy
+          #    rot when the stack was recreated and moved to another environment.
+          stacks_status=$(curl -sS -o "$tmpdir/stacks.json" -w "%{http_code}" \
+            -H "X-API-Key: ${PORTAINER_API_KEY}" \
+            "${PORTAINER_URL}/api/stacks")
+          if [ "$stacks_status" -lt 200 ] || [ "$stacks_status" -ge 300 ]; then
+            echo "GET /api/stacks failed with status ${stacks_status}" >&2
+            cat "$tmpdir/stacks.json" >&2
+            exit 1
+          fi
+
+          matches=$(jq -c --arg name "$PORTAINER_STACK_NAME" \
+            '[.[] | select(.Name == $name)]' "$tmpdir/stacks.json")
+          match_count=$(jq 'length' <<<"$matches")
+          if [ "$match_count" -eq 0 ]; then
+            echo "No Portainer stack named '${PORTAINER_STACK_NAME}' was found." >&2
+            echo "Stack names that do exist:" >&2
+            jq -r 'if length == 0 then "  <none>" else .[] | "  \(.Name)" end' \
+              "$tmpdir/stacks.json" >&2
+            exit 1
+          fi
+          if [ "$match_count" -gt 1 ]; then
+            echo "More than one Portainer stack is named '${PORTAINER_STACK_NAME}' (${match_count} matches); refusing to guess which one to deploy." >&2
+            echo "Matching stacks:" >&2
+            jq -r '.[] | "  Id=\(.Id) EndpointId=\(.EndpointId)"' <<<"$matches" >&2
+            exit 1
+          fi
+
+          stack_id=$(jq -r '.[0].Id' <<<"$matches")
+          endpoint_id=$(jq -r '.[0].EndpointId' <<<"$matches")
+          if [ -z "$stack_id" ] || [ "$stack_id" = "null" ] \
+            || [ -z "$endpoint_id" ] || [ "$endpoint_id" = "null" ]; then
+            echo "Portainer returned no Id/EndpointId for stack '${PORTAINER_STACK_NAME}' (Id='${stack_id}', EndpointId='${endpoint_id}')" >&2
+            exit 1
+          fi
+
+          # 2. Read the current stack Env array. Sending an empty Env wipes the
           #    variables the running container needs, so this read is mandatory.
+          get_request="GET /api/stacks/${stack_id}"
           get_status=$(curl -sS -o "$tmpdir/get.json" -w "%{http_code}" \
             -H "X-API-Key: ${PORTAINER_API_KEY}" \
-            "${PORTAINER_URL}/api/stacks/43")
+            "${PORTAINER_URL}/api/stacks/${stack_id}")
           if [ "$get_status" -lt 200 ] || [ "$get_status" -ge 300 ]; then
-            echo "GET /api/stacks/43 failed with status $get_status" >&2
+            echo "${get_request} failed with status ${get_status}" >&2
             cat "$tmpdir/get.json" >&2
             exit 1
           fi
           env_json=$(jq -c '.Env // []' "$tmpdir/get.json")
 
-          # 2. Build the deploy body and PUT it.
+          # 3. Build the deploy body and PUT it.
           jq -n \
             --rawfile compose docker-compose.deploy.yml \
             --argjson env "$env_json" \
             '{StackFileContent: $compose, Env: $env, PullImage: true}' \
             > "$tmpdir/body.json"
 
+          put_request="PUT /api/stacks/${stack_id}?endpointId=${endpoint_id}"
           put_status=$(curl -sS -o "$tmpdir/put.json" -w "%{http_code}" \
             -X PUT \
             -H "X-API-Key: ${PORTAINER_API_KEY}" \
             -H "Content-Type: application/json" \
             --data-binary "@$tmpdir/body.json" \
-            "${PORTAINER_URL}/api/stacks/43?endpointId=9")
+            "${PORTAINER_URL}/api/stacks/${stack_id}?endpointId=${endpoint_id}")
           if [ "$put_status" -lt 200 ] || [ "$put_status" -ge 300 ]; then
-            echo "PUT /api/stacks/43?endpointId=9 failed with status $put_status" >&2
+            echo "${put_request} failed with status ${put_status}" >&2
             cat "$tmpdir/put.json" >&2
             exit 1
           fi
