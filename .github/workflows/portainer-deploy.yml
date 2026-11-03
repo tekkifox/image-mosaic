@@ -10,8 +10,9 @@ permissions:
   packages: write
 
 jobs:
+  # Builds the amd64 image natively on the fleet's self-hosted x86 runner.
   build-and-publish:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, paseo]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
