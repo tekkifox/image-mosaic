@@ -10,9 +10,9 @@ permissions:
   packages: write
 
 jobs:
-  # amd64 image, built natively on the standard GitHub-hosted x86 runner.
+  # amd64 image, built natively on the fleet's self-hosted x86 runner.
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, paseo]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -82,7 +82,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # arm64 image, built natively on the GitHub-hosted ARM runner. No QEMU.
+  # arm64 image, built natively on the GitHub-hosted ARM runner. No QEMU, and
+  # the fleet's self-hosted runner is x86_64, so this job stays GitHub-hosted.
   build-arm64:
     runs-on: ubuntu-26.04-arm
     steps:
@@ -154,9 +155,11 @@ jobs:
 
   # Publish the multi-arch manifest from both digests, then trigger the deploy.
   # This is the only place the Portainer webhook fires, and it runs only after
-  # the manifest has been pushed.
+  # the manifest has been pushed. It runs on the self-hosted runner so it can
+  # reach the storage hub through its TLS front door (PORTAINER_URL, e.g.
+  # https://100.120.32.67:8444).
   merge:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, paseo]
     needs: [build, build-arm64]
     steps:
       - name: Download amd64 digest
